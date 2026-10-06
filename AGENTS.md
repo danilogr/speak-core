@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Operating rules for this Python backend. Keep this file stable and short.
+Operating rules for this Python library. Keep this file stable and short.
 If a rule here conflicts with a harness/ doc, this file wins.
 
 ## Role
@@ -20,10 +20,8 @@ If a rule here conflicts with a harness/ doc, this file wins.
 ## Project docs (read/update these, not this file)
 - Read the relevant doc at the START of any non-trivial task:
   - harness/architecture.md — system shape, boundaries, data model, key decisions.
-  - harness/user-flow.md — request/response and business flows, states, edge cases.
   - harness/design-guidelines.md — environment, naming, layering, errors, logging,
     comments, tests. Includes the uv commands and the code standards.
-  - harness/performance.md — measured latency, memory, disk, and audio levels.
   - harness/layout.md — codebase layout and file responsibilities.
 - Update the matching doc AFTER an agreed change (e.g. approved architectural
   decision -> architecture.md). Never record such changes in AGENTS.md.

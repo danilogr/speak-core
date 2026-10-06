@@ -36,8 +36,13 @@ needs no return or argument annotations — but a function nested inside one sti
 - Functions do one thing. Split when they stop fitting on a screen.
 - Catch specific exceptions. Never a bare `except:`, never a silent `except: pass`.
 - Validate external input at its boundary (env, CLI, HTTP, queue); trust internal calls.
-- No secrets in code or logs. Configuration comes from the environment.
+- No secrets in code or logs. Configuration comes from the environment, handed in as a mapping.
 - Match the patterns already in the file being edited.
+- Never read `os.environ`: take the mapping the plugin read. The one exception is
+  `engines.say` reading `LANG`, which is the platform's locale, not configuration.
+- The shared state directory's file formats (`server.json`, `clients/`, `starting/`,
+  `speaker/`, `speaker-waiting/`) are a contract between versions. Change one, change
+  `config.SHARED_STATE_DIRNAME`.
 
 ## SOLID / DRY / YAGNI (checkable, not slogans)
 
@@ -53,10 +58,8 @@ needs no return or argument annotations — but a function nested inside one sti
 
 ## Naming and layering
 
-- Exception names end in `Error` (ruff `N818`). Three read better without it and
-  suppress the rule where they are defined, each with its reason: `MicrophoneBusy`,
-  `RecorderUnavailable`, `TranscriptionFailed`
-  rather than a failure.
+- Exception names end in `Error` (ruff `N818`). One reads better without it and
+  suppresses the rule where it is defined, with its reason: `TranscriptionFailed`.
 - Pure logic is separated from the device or socket that feeds it: a state machine
   that takes values, wrapped in a thin shell that does the I/O. The shell is where
   the untestable part lives, so keep it small.
@@ -67,13 +70,9 @@ needs no return or argument annotations — but a function nested inside one sti
 
 - `logging.getLogger(__name__)` per module. Lazy `%`-style arguments (ruff `G`), never
   an f-string inside a log call.
-- No `print()` in library code. The one exception is `talk.py`, where stdout *is* the
-  product: a slash command splices it into the prompt.
-- An error a user has to act on says what to do, not just what failed. An error that
-  reaches the model travels as a `ToolError`, because the MCP SDK replaces raw
-  exception text with a generic message.
-- Anything user-facing that could be mistaken for content gets a marker: `/talk`
-  prefixes failures with `speak:` so a transcript cannot be confused with an error.
+- No `print()` anywhere. The consent and stats commands (`telemetry.cli.run`,
+  `telemetry.report.run`) write to streams their caller passes.
+- An error a user has to act on says what to do, not just what failed.
 
 ## Comments and docs
 
@@ -87,7 +86,7 @@ needs no return or argument annotations — but a function nested inside one sti
   constraint, not the story: *"these two must agree or every limit skews by their
   ratio"*, not *"they disagreed once and everything skewed"*.
 - No dated entries anywhere. `2026-01-01 — we decided X` is a changelog.
-- Measured numbers live in `performance.md`, with the hardware stated once. Quoting a
+- Measured numbers live in the plugins' `harness/performance.md`, with the hardware stated once. Quoting a
   figure in code or in the README dates them both.
 
 ## Tests
@@ -107,3 +106,5 @@ needs no return or argument annotations — but a function nested inside one sti
   hangs instead of failing. `pytest-timeout` caps every test at 30 s to turn that
   back into a red test. It sits below `STALL_TIMEOUT` (60 s) deliberately: a wedged
   `drain()` has to redden rather than outlast the suite.
+- Telemetry tests use the two schemas in `tests/telemetry/telemetry_fixtures.py`; a
+  change to the store or shipper is tested against both.

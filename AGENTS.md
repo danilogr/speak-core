@@ -13,7 +13,7 @@ If a rule here conflicts with a harness/ doc, this file wins.
   completed-task summaries, session history, or dated entries to this file.
 - NEVER add "I did X" or "as of <date>" notes here.
 - Architectural decisions -> harness/architecture.md.
-- Flows/behavior -> harness/user-flow.md. Conventions -> harness/design-guidelines.md.
+- Flows/behavior -> harness/architecture.md. Conventions -> harness/design-guidelines.md.
 - Ephemeral progress -> the task tracker or git history, not here.
 - Only edit this file to change a standing rule, and only when I ask.
 

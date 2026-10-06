@@ -46,7 +46,7 @@ class Transcriber(Protocol):
     async def liveness(self) -> Liveness: ...
 
 
-class TranscriptionFailed(RuntimeError):  # noqa: N818 - matches the plugin's other failure names
+class TranscriptionFailed(RuntimeError):  # noqa: N818 - reads as a statement of what happened, not a fault type
     """The server could not be reached, or answered with something unusable."""
 
 

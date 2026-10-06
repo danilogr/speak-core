@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 from telemetry_fixtures import IDENTITY
 
-from speak.telemetry import consent, ping
-from speak.telemetry.ship import TransportResponse
+from speak_core.telemetry import consent, ping
+from speak_core.telemetry.ship import TransportResponse
 
 INGEST = "https://telemetry.example/v1/ingest"
 
@@ -123,7 +123,7 @@ async def test_debug_logs_the_ping_and_neither_sends_nor_records_it(tmp_path, ca
     pending = due(tmp_path)
     assert pending is not None
     transport = Transport(NO_CONTENT)
-    with caplog.at_level("INFO", logger="speak.telemetry.ping"):
+    with caplog.at_level("INFO", logger="speak_core.telemetry.ping"):
         assert await ping.send(pending, transport=transport, debug=True) is False
     assert transport.calls == []
     assert '"event": "install"' in caplog.text

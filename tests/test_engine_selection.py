@@ -1,10 +1,10 @@
 import pytest
 
-from speak.config import ServerSettings, VoiceSettings
-from speak.engines import build_engine
-from speak.engines.command import CommandEngine
-from speak.engines.nemo import NemoEngine
-from speak.engines.say import SayEngine
+from speak_core.config import ServerSettings, VoiceSettings
+from speak_core.engines import build_engine
+from speak_core.engines.command import CommandEngine
+from speak_core.engines.nemo import NemoEngine
+from speak_core.engines.say import SayEngine
 
 
 def engine_for(env, prefix="SPEAK"):

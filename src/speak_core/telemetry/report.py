@@ -8,9 +8,9 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import TextIO
 
-from speak.telemetry import consent, store
-from speak.telemetry.identity import TelemetryIdentity
-from speak.telemetry.schema import TelemetrySchema
+from speak_core.telemetry import consent, store
+from speak_core.telemetry.identity import TelemetryIdentity
+from speak_core.telemetry.schema import TelemetrySchema
 
 
 def run(

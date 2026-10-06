@@ -3,9 +3,9 @@ from pathlib import Path
 
 import httpx2
 
-from speak.engines.nemo import NemoEngine
-from speak.engines.say import SayEngine
-from speak.player import Player
+from speak_core.engines.nemo import NemoEngine
+from speak_core.engines.say import SayEngine
+from speak_core.player import Player
 
 WAV = b"RIFF\x00\x00\x00\x00WAVEfmt "
 
@@ -45,7 +45,7 @@ async def test_writes_the_wav_and_hands_it_to_the_resolved_player():
 async def test_a_machine_with_no_player_speaks_through_the_fallback(monkeypatch):
     """Audio that cannot be played is worse than no audio: the sentence would go
     missing silently, where the fallback at least says it."""
-    monkeypatch.setattr("speak.engines.nemo.resolve_player", lambda: None)
+    monkeypatch.setattr("speak_core.engines.nemo.resolve_player", lambda: None)
     engine = engine_over(speech_ok, player=None)
     utterance = await engine.prepare("hello", voice=None, rate=None)
     assert utterance.command == "say"

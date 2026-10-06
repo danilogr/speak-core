@@ -1,6 +1,6 @@
 """Finding a sound player. Nothing here plays a sound or looks at a real machine."""
 
-from speak.player import Player, candidates, resolve_player
+from speak_core.player import Player, candidates, resolve_player
 
 
 def installed(*names: str):

@@ -1,4 +1,4 @@
-from speak.engines.say import SayEngine, parse_voice_listing
+from speak_core.engines.say import SayEngine, parse_voice_listing
 
 LISTING = """Albert              en_US    # Hello! My name is Albert.
 Alice               it_IT    # Ciao! Mi chiamo Alice.
@@ -64,7 +64,7 @@ async def _fixed_listing() -> str:
 
 
 def test_the_random_pool_is_natural_voices_only():
-    from speak.engines.say import NATURAL_VOICES
+    from speak_core.engines.say import NATURAL_VOICES
 
     assert SayEngine().random_pool == NATURAL_VOICES
     for novelty in ("Zarvox", "Bubbles", "Bad News", "Trinoids", "Albert", "Grandma"):
@@ -72,6 +72,6 @@ def test_the_random_pool_is_natural_voices_only():
 
 
 def test_the_random_pool_names_are_plain_with_no_locale_suffix():
-    from speak.engines.say import NATURAL_VOICES
+    from speak_core.engines.say import NATURAL_VOICES
 
     assert not any("(" in name for name in NATURAL_VOICES)

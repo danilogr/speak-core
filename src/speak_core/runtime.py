@@ -9,8 +9,8 @@ from collections.abc import Callable
 
 import httpx2
 
-from speak.config import ServerSettings
-from speak.supervisor import NemoSupervisor, Probe, Spawn, process_is_alive, spawn_server
+from speak_core.config import ServerSettings
+from speak_core.supervisor import NemoSupervisor, Probe, Spawn, process_is_alive, spawn_server
 
 HEALTH_TIMEOUT = 30.0
 HEALTH_INTERVAL = 0.5

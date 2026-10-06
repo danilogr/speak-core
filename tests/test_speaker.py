@@ -5,7 +5,7 @@ import asyncio
 import time
 from collections.abc import Callable
 
-from speak.speaker import LOCK_DIRNAME, WAITING_DIRNAME, SpeakerLock
+from speak_core.speaker import LOCK_DIRNAME, WAITING_DIRNAME, SpeakerLock
 
 ALIVE = {1, 2}
 

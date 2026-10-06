@@ -14,8 +14,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from speak.exclusive import ExclusiveLock
-from speak.supervisor import process_is_alive
+from speak_core.exclusive import ExclusiveLock
+from speak_core.supervisor import process_is_alive
 
 logger = logging.getLogger(__name__)
 

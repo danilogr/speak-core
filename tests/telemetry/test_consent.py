@@ -2,8 +2,8 @@
 
 from telemetry_fixtures import IDENTITY
 
-from speak.telemetry import consent
-from speak.telemetry.machine import MachineFacts
+from speak_core.telemetry import consent
+from speak_core.telemetry.machine import MachineFacts
 
 FACTS = MachineFacts(
     os="darwin",

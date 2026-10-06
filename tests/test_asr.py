@@ -1,7 +1,7 @@
 import httpx2
 import pytest
 
-from speak.engines.asr import (
+from speak_core.engines.asr import (
     PROBE_TIMEOUT,
     Liveness,
     NemoTranscriber,

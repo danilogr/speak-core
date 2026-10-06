@@ -22,9 +22,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from speak.telemetry import consent
-from speak.telemetry.identity import TelemetryIdentity
-from speak.telemetry.ship import CONTRACT_OS, Transport
+from speak_core.telemetry import consent
+from speak_core.telemetry.identity import TelemetryIdentity
+from speak_core.telemetry.ship import CONTRACT_OS, Transport
 
 logger = logging.getLogger(__name__)
 

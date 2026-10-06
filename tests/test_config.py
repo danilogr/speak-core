@@ -3,13 +3,13 @@ read under the plugin's own prefix."""
 
 from pathlib import Path
 
-from speak.config import (
+from speak_core.config import (
     DEFAULT_NEMO_URL,
     ServerSettings,
     VoiceSettings,
     plugin_state_dir,
 )
-from speak.text import DEFAULT_MAX_CHARS
+from speak_core.text import DEFAULT_MAX_CHARS
 
 
 def server(env: dict[str, str], platform: str = "darwin") -> ServerSettings:

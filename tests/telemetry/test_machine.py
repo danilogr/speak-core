@@ -2,7 +2,7 @@
 
 import time
 
-from speak.telemetry import machine
+from speak_core.telemetry import machine
 
 
 def test_probe_never_calls_system_profiler(monkeypatch) -> None:

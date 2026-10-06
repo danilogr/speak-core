@@ -8,7 +8,7 @@ from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Protocol
 
-from speak.engines.base import Utterance
+from speak_core.engines.base import Utterance
 
 logger = logging.getLogger(__name__)
 

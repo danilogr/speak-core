@@ -5,8 +5,8 @@ from pathlib import Path
 
 from telemetry_fixtures import IDENTITY
 
-from speak.telemetry import consent
-from speak.telemetry.identity import TelemetryIdentity
+from speak_core.telemetry import consent
+from speak_core.telemetry.identity import TelemetryIdentity
 
 OTHER = TelemetryIdentity(
     plugin="voicebox",

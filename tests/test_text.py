@@ -1,6 +1,6 @@
 import pytest
 
-from speak.text import DEFAULT_MAX_CHARS, normalize
+from speak_core.text import DEFAULT_MAX_CHARS, normalize
 
 
 def test_collapses_all_whitespace_to_single_spaces():

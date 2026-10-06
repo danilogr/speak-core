@@ -7,7 +7,7 @@ from pathlib import Path
 
 from telemetry_fixtures import IDENTITY, UTTERANCES
 
-from speak.telemetry import consent, report, store
+from speak_core.telemetry import consent, report, store
 
 
 def render(conn: sqlite3.Connection) -> str:

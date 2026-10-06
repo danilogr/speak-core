@@ -5,10 +5,10 @@ import time
 
 import pytest
 
-from speak import supervisor as supervisor_module
-from speak.config import ServerSettings
-from speak.runtime import supervisor_for
-from speak.supervisor import NemoSupervisor
+from speak_core import supervisor as supervisor_module
+from speak_core.config import ServerSettings
+from speak_core.runtime import supervisor_for
+from speak_core.supervisor import NemoSupervisor
 
 
 class Spawns:
@@ -297,7 +297,7 @@ async def test_a_stale_lock_that_cannot_be_removed_gives_up(tmp_path, monkeypatc
     lock.mkdir(parents=True)
     long_ago = time.time() - 3600
     os.utime(lock, (long_ago, long_ago))
-    monkeypatch.setattr("speak.supervisor.shutil.rmtree", lambda *_a, **_k: None)
+    monkeypatch.setattr("speak_core.supervisor.shutil.rmtree", lambda *_a, **_k: None)
 
     spawns = Spawns()
     assert await build(tmp_path, spawn=spawns).ensure_running() is False

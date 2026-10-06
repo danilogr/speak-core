@@ -16,8 +16,8 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
-from speak.telemetry.identity import TelemetryIdentity
-from speak.telemetry.machine import MachineFacts
+from speak_core.telemetry.identity import TelemetryIdentity
+from speak_core.telemetry.machine import MachineFacts
 
 logger = logging.getLogger(__name__)
 

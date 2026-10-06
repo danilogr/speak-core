@@ -4,11 +4,11 @@ import logging
 import sys
 from collections.abc import Callable
 
-from speak.config import ServerSettings, VoiceSettings
-from speak.engines.base import Engine, Utterance
-from speak.engines.command import CommandEngine
-from speak.engines.nemo import NemoEngine
-from speak.engines.say import SayEngine
+from speak_core.config import ServerSettings, VoiceSettings
+from speak_core.engines.base import Engine, Utterance
+from speak_core.engines.command import CommandEngine
+from speak_core.engines.nemo import NemoEngine
+from speak_core.engines.say import SayEngine
 
 logger = logging.getLogger(__name__)
 

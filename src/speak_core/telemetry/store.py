@@ -25,7 +25,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from speak.telemetry.schema import RowTable, TelemetrySchema
+from speak_core.telemetry.schema import RowTable, TelemetrySchema
 
 logger = logging.getLogger(__name__)
 

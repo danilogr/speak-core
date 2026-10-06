@@ -1,6 +1,6 @@
 """Hand speech to an arbitrary command: piper, espeak, a script, a remote speaker."""
 
-from speak.engines.base import Utterance
+from speak_core.engines.base import Utterance
 
 
 class CommandEngine:

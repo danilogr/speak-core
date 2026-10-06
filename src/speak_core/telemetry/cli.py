@@ -13,8 +13,8 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import TextIO
 
-from speak.telemetry import consent
-from speak.telemetry.identity import TelemetryIdentity
+from speak_core.telemetry import consent
+from speak_core.telemetry.identity import TelemetryIdentity
 
 
 def _usage(identity: TelemetryIdentity, *, allow_record: bool) -> str:

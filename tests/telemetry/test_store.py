@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from telemetry_fixtures import UTTERANCES
 
-from speak.telemetry import store
+from speak_core.telemetry import store
 
 INSTALL = {
     "install_id": "install-1",

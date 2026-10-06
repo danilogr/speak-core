@@ -4,7 +4,7 @@ import io
 
 from telemetry_fixtures import IDENTITY
 
-from speak.telemetry import cli, consent
+from speak_core.telemetry import cli, consent
 
 
 def run(tmp_path, *argv: str, allow_record: bool = False, env: dict[str, str] | None = None):

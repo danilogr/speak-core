@@ -14,11 +14,11 @@ from pathlib import Path
 
 import httpx2
 
-from speak.telemetry import consent, machine, store
-from speak.telemetry.consent import Consent
-from speak.telemetry.identity import TelemetryIdentity
-from speak.telemetry.schema import TelemetrySchema
-from speak.telemetry.ship import TransportResponse
+from speak_core.telemetry import consent, machine, store
+from speak_core.telemetry.consent import Consent
+from speak_core.telemetry.identity import TelemetryIdentity
+from speak_core.telemetry.schema import TelemetrySchema
+from speak_core.telemetry.ship import TransportResponse
 
 logger = logging.getLogger(__name__)
 

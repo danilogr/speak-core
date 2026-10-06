@@ -2,7 +2,7 @@
 
 import pytest
 
-from speak.exclusive import ExclusiveLock
+from speak_core.exclusive import ExclusiveLock
 
 ALIVE = {100, 200, 300}
 

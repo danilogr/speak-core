@@ -1,6 +1,6 @@
 import pytest
 
-from speak.engines.command import CommandEngine
+from speak_core.engines.command import CommandEngine
 
 
 async def test_appends_the_text_as_a_single_final_argument():

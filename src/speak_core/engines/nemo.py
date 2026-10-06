@@ -11,9 +11,9 @@ from pathlib import Path
 
 import httpx2
 
-from speak.engines.base import Engine, Utterance
-from speak.engines.say import SayEngine
-from speak.player import Player, resolve_player
+from speak_core.engines.base import Engine, Utterance
+from speak_core.engines.say import SayEngine
+from speak_core.player import Player, resolve_player
 
 logger = logging.getLogger(__name__)
 

@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
-from speak.text import DEFAULT_MAX_CHARS
+from speak_core.text import DEFAULT_MAX_CHARS
 
 logger = logging.getLogger(__name__)
 

@@ -5,7 +5,7 @@ import logging
 import os
 from collections.abc import Awaitable, Callable
 
-from speak.engines.base import Utterance
+from speak_core.engines.base import Utterance
 
 logger = logging.getLogger(__name__)
 

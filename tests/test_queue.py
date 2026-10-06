@@ -4,9 +4,9 @@ from collections.abc import Callable
 
 import pytest
 
-from speak.engines.base import Utterance
-from speak.queue import Process, SpeechQueue
-from speak.speaker import WAITING_DIRNAME, SpeakerLock
+from speak_core.engines.base import Utterance
+from speak_core.queue import Process, SpeechQueue
+from speak_core.speaker import WAITING_DIRNAME, SpeakerLock
 
 
 class FakeProcess:
@@ -356,8 +356,8 @@ async def test_drain_waits_as_long_as_the_queue_keeps_finishing():
     the window, so only a stall ends the wait."""
     import asyncio as aio
 
-    from speak.engines.base import Utterance
-    from speak.queue import SpeechQueue
+    from speak_core.engines.base import Utterance
+    from speak_core.queue import SpeechQueue
 
     class Quick:
         def terminate(self) -> None: ...
@@ -391,8 +391,8 @@ async def test_drain_gives_up_when_nothing_finishes_at_all():
 
     import pytest as pt
 
-    from speak.engines.base import Utterance
-    from speak.queue import SpeechQueue
+    from speak_core.engines.base import Utterance
+    from speak_core.queue import SpeechQueue
 
     class Wedged:
         def terminate(self) -> None: ...
@@ -914,7 +914,7 @@ async def test_size_never_dips_while_an_utterance_changes_hands():
 
 
 async def test_on_finish_reports_ok_with_timings_for_a_normal_play(running):
-    from speak.queue import UtteranceOutcome
+    from speak_core.queue import UtteranceOutcome
 
     outcomes: list[UtteranceOutcome] = []
     queue, _ = running(on_finish=outcomes.append)
@@ -933,7 +933,7 @@ async def test_on_finish_reports_ok_with_timings_for_a_normal_play(running):
 
 
 async def test_on_finish_carries_the_utterances_own_audio_ms(running):
-    from speak.queue import UtteranceOutcome
+    from speak_core.queue import UtteranceOutcome
 
     async def prepare(text, *, voice, rate) -> Utterance:
         return Utterance(command="true", args=[text], audio_ms=1234)
@@ -947,7 +947,7 @@ async def test_on_finish_carries_the_utterances_own_audio_ms(running):
 
 
 async def test_on_finish_reports_failed_when_prepare_raises(running):
-    from speak.queue import UtteranceOutcome
+    from speak_core.queue import UtteranceOutcome
 
     async def prepare(text, *, voice, rate) -> Utterance:
         raise RuntimeError("synthesis failed")
@@ -963,7 +963,7 @@ async def test_on_finish_reports_failed_when_prepare_raises(running):
 
 
 async def test_on_finish_reports_failed_when_the_spawn_itself_fails(running):
-    from speak.queue import UtteranceOutcome
+    from speak_core.queue import UtteranceOutcome
 
     async def spawn(command: str, args: list[str]) -> FakeProcess:
         raise OSError("no such binary")
@@ -977,7 +977,7 @@ async def test_on_finish_reports_failed_when_the_spawn_itself_fails(running):
 
 
 async def test_on_finish_reports_discarded_for_an_utterance_dropped_while_waiting(running):
-    from speak.queue import UtteranceOutcome
+    from speak_core.queue import UtteranceOutcome
 
     outcomes: list[UtteranceOutcome] = []
     queue, _ = running(spawn=Spawner(autofinish=False), on_finish=outcomes.append)
@@ -994,7 +994,7 @@ async def test_on_finish_reports_discarded_for_an_utterance_dropped_while_waitin
 
 
 async def test_on_finish_reports_discarded_for_an_utterance_stopped_mid_prepare(running):
-    from speak.queue import UtteranceOutcome
+    from speak_core.queue import UtteranceOutcome
 
     release = asyncio.Event()
 
@@ -1018,7 +1018,7 @@ async def test_on_finish_reports_discarded_for_an_utterance_stopped_mid_prepare(
 
 
 async def test_on_finish_reports_discarded_for_an_utterance_stopped_during_spawn(running):
-    from speak.queue import UtteranceOutcome
+    from speak_core.queue import UtteranceOutcome
 
     spawner = Spawner()
     release = asyncio.Event()
@@ -1042,7 +1042,7 @@ async def test_on_finish_reports_discarded_for_an_utterance_stopped_during_spawn
 
 
 async def test_a_telemetry_callback_that_raises_does_not_break_playback(running):
-    from speak.queue import UtteranceOutcome
+    from speak_core.queue import UtteranceOutcome
 
     def exploding_callback(outcome: UtteranceOutcome) -> None:
         raise RuntimeError("telemetry backend is down")
@@ -1072,7 +1072,7 @@ async def test_a_stop_during_playback_reports_interrupted_not_ok(running):
     """Cut off while audible is its own outcome: counting it as `ok` hides every
     interruption, and counting it as `discarded` merges it with sentences nobody
     heard at all."""
-    from speak.queue import UtteranceOutcome
+    from speak_core.queue import UtteranceOutcome
 
     process = ExitingProcess()
 
@@ -1094,7 +1094,7 @@ async def test_a_stop_during_playback_reports_interrupted_not_ok(running):
 
 
 async def test_a_player_that_exits_non_zero_on_its_own_reports_failed(running):
-    from speak.queue import UtteranceOutcome
+    from speak_core.queue import UtteranceOutcome
 
     async def spawn(command: str, args: list[str]) -> ExitingProcess:
         process = ExitingProcess(returncode=1)
@@ -1123,10 +1123,10 @@ async def test_queue_wait_ends_when_synthesis_starts_not_when_playback_ends(runn
     """`queue_wait_ms` is time spent behind other utterances. The first sentence
     waits for nothing however long it plays; the second waits only for the first
     one's synthesis, because it is prepared while the first is playing."""
-    from speak.queue import UtteranceOutcome
+    from speak_core.queue import UtteranceOutcome
 
     clock = FakeClock()
-    monkeypatch.setattr("speak.queue.time", clock)
+    monkeypatch.setattr("speak_core.queue.time", clock)
 
     async def prepare(text, *, voice, rate) -> Utterance:
         clock.now += 1.0  # each synthesis takes one second
@@ -1152,7 +1152,7 @@ async def test_queue_wait_ends_when_synthesis_starts_not_when_playback_ends(runn
 
 
 async def test_on_finish_passes_through_the_engine_and_voice_the_utterance_reported(running):
-    from speak.queue import UtteranceOutcome
+    from speak_core.queue import UtteranceOutcome
 
     async def prepare(text, *, voice, rate) -> Utterance:
         return Utterance(command="say", args=[text], engine="say", voice=None)

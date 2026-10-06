@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from telemetry_fixtures import UTTERANCES
 
-from speak.telemetry import ship, store
+from speak_core.telemetry import ship, store
 
 INSTALL = {
     "install_id": "install-1",
@@ -550,7 +550,7 @@ async def test_a_chunk_budgets_for_the_sessions_it_carries() -> None:
 async def test_debug_mode_logs_a_session_only_batch_and_marks_nothing(caplog) -> None:
     conn = seeded_conn([])
     transport = FakeTransport()
-    with caplog.at_level("INFO", logger="speak.telemetry.ship"):
+    with caplog.at_level("INFO", logger="speak_core.telemetry.ship"):
         await ship.ship(
             conn,
             schema=UTTERANCES,

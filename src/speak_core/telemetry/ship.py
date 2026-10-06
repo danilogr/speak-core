@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from speak.telemetry import store
-from speak.telemetry.schema import RowTable, TelemetrySchema
+from speak_core.telemetry import store
+from speak_core.telemetry.schema import RowTable, TelemetrySchema
 
 logger = logging.getLogger(__name__)
 

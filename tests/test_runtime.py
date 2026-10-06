@@ -5,7 +5,7 @@ import sys
 
 import pytest
 
-from speak import runtime
+from speak_core import runtime
 
 
 @pytest.fixture

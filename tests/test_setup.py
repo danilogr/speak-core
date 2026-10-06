@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 
-from speak import setup
+from speak_core import setup
 
 
 def test_the_installer_ships_inside_the_package():

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from telemetry_fixtures import JOBS
 
-from speak.telemetry import ship, store
+from speak_core.telemetry import ship, store
 
 URL = "https://telemetry.example/v1/ingest"
 INSTALL = {

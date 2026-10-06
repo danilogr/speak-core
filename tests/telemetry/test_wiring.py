@@ -4,7 +4,7 @@ the install row brought up to date."""
 import pytest
 from telemetry_fixtures import IDENTITY, UTTERANCES
 
-from speak.telemetry import store, wiring
+from speak_core.telemetry import store, wiring
 
 
 def start(tmp_path, **extra: str):

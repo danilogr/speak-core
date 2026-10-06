@@ -332,3 +332,43 @@ plugin stores is its own.
   inputs, so each plugin keeps its own database, consent, install id, endpoint and
   contract, and a change to the mechanism reaches both. Rejected: one shared contract,
   which ties two products' data models together.
+
+- **A short-lived process registers with the supervisor at start.** A one-shot process
+  that needs the speech server (a dictation command, say) would pay a cold start on every
+  invocation if the server stopped between runs. `NemoSupervisor.register()` records the
+  process in `clients/`, so the server stays up while any registered process lives.
+  Registering eagerly trades resident memory from session start for an instant first
+  request; the transcription model roughly doubles what the server holds. A plugin that
+  does not need the server up front may register lazily.
+
+- **A running speech server is never replaced, and callers guard it twice.** A second
+  server would overwrite `server.json` with a pid that cannot bind the port and orphan the
+  first; the last process out would then stop the wrong pid and leave a gigabyte resident.
+  A caller that can ask first calls `reachable()` before `ensure_running()`. That check is
+  liveness, not readiness: any HTTP answer means the port is taken, including the 503 of a
+  server still warming up and a server with no ASR model, neither of which may be
+  replaced. `ensure_running` then refuses again when `server.json` names a live pid. That
+  is the only guard for a caller that cannot make the first check, such as a TTS fallback
+  that fires on any HTTP failure, a 5xx or a timeout from a loaded server included. The pid
+  check is the weaker of the two, since it trusts `server.json` and a pid the OS has since
+  reused reads as live, but guarding in the supervisor covers every call site at once.
+
+- **A cold start is reported as a cold start, not as a missing model.** `has_asr` answers
+  False for any HTTP failure, so a server that is absent or still loading looks exactly
+  like one with no transcription model, and the remedies for the second do not apply to
+  the first. Three pieces hold it together: `liveness()` answers ABSENT, STARTING or READY
+  off one `/health` request; `ensure_running` probes on its early returns too, so a caller
+  that finds another process's start under way is handed a server that has answered, not
+  merely one that has been recorded; and a caller waits on its own warmup before judging.
+  Readiness must not be inferred from `has_asr`.
+
+- **Transcription and liveness get different timeouts, and the transcription one is
+  derived by the caller.** They share an HTTP client but not a wait: `/health` and
+  `/v1/models` are localhost questions a live server answers in milliseconds
+  (`PROBE_TIMEOUT`), while a transcription is minutes of audio through a model. One value
+  cannot serve both: short enough for a probe will not transcribe a long recording, and
+  long enough to transcribe holds a caller for that whole time against a wedged server. A
+  transcription that times out has already discarded its audio. The probes therefore take
+  a short fixed timeout, and the caller derives the transcription timeout from its own
+  recording cap, the only number that bounds it; `DEFAULT_TIMEOUT` is a backstop above any
+  plugin's default cap.

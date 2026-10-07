@@ -27,6 +27,9 @@ tools and no commands, and it never reads the environment: plugins pass it a map
   An engine turns a sentence into an `Utterance`: a command, its arguments, and an
   optional async cleanup. Engines must not play audio or manage processes themselves.
   In every engine the text is an argv element and is never interpolated into a shell.
+  `engines.nemo.NemoSynthesizer` is the HTTP half of the `nemo` engine, public so a plugin
+  that writes audio files can call it with its own per-request timeout and get
+  `SynthesisFailed` instead of a `say` fallback; `NemoEngine` delegates its requests to it.
 - **`queue.SpeechQueue`** — owns playback. Exactly one child process runs at a time.
   `enqueue` is synchronous and returns the number of utterances ahead; a single worker
   task drains the queue. `drain()` waits until nothing is queued, being synthesized, or
@@ -38,7 +41,8 @@ tools and no commands, and it never reads the environment: plugins pass it a map
   state directory, plus a `speaker-waiting/<pid>` marker per waiting process. It must
   never silence speech: a shared directory it cannot use, or an error inside it that is
   not a concurrent claim or release (`RACE_ERRNOS`), is a warning and an uncoordinated
-  utterance; a race is retried at the next poll.
+  utterance; a race is retried at the next poll. No two processes overlap unless the lock
+  itself is unusable.
 - **`supervisor.NemoSupervisor`** — starts, shares, and stops the local speech server.
   `warm(reachable)` is the start a caller that can ask the port first uses. It must not
   synthesize or play anything.
@@ -325,15 +329,24 @@ plugin stores is its own.
   machine in a daemon, which is new infrastructure; and holding the lock for a whole
   batch, which makes a status line wait for a whole read-aloud.
 
+- **Synthesis for files has no fallback; synthesis for speech does.** The same request
+  serves both, through `NemoSynthesizer`. A spoken sentence that cannot reach the server is
+  better said by `say` than lost, so `NemoEngine` falls back; an audio file that changes
+  voice halfway is worse than an error, so a file writer calls `NemoSynthesizer` directly
+  and turns `SynthesisFailed.kind` (unreachable, timeout, refused) into its own reason.
+  Rejected: a `fallback=None` mode on `NemoEngine`, which would also need a player it
+  does not use.
+
 - **An ownerless speaker lock is busy until it is stale.** Election is `mkdir`, then
   the owner file, and release removes them in the other order, so every claim and
   release passes through a moment where the directory exists with no owner. Reclaiming
   it at once lets two processes hold the speakers: three processes at production poll
   and handoff values overlap about 2 times in 900 utterances that way. So a directory with no owner file
   is reclaimed only after `OWNERLESS_GRACE` (2 s) without a change, which only a
-  claimer that died mid-claim leaves; a failure inside the lock directory is retried
-  rather than played unlocked, and only a shared directory that cannot be used plays
-  uncoordinated. The cost: a crash in that gap delays the next utterance by up to 2 s.
+  claimer that died mid-claim leaves. A race error inside the lock directory
+  (`ENOENT`, `EEXIST`, `ENOTEMPTY`) is retried at the next poll; any other error, or a
+  shared directory that cannot be used, plays uncoordinated. The cost: a crash in that gap delays the next
+  utterance by up to 2 s.
   Known limitation: two processes reclaiming the same dead holder's lock at once can
   both take it, the window the start lock's takeover also accepts.
 

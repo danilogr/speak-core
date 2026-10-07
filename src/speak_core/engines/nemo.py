@@ -41,6 +41,89 @@ def _wav_duration_ms(wav: bytes) -> int | None:
     return round(frames / rate * 1000) if rate > 0 else None
 
 
+class SynthesisFailed(RuntimeError):  # noqa: N818 - reads as what happened, like TranscriptionFailed
+    """The speech server could not be reached, did not answer in time, or refused."""
+
+    UNREACHABLE = "unreachable"
+    TIMEOUT = "timeout"
+    REFUSED = "refused"
+
+    def __init__(self, message: str, *, kind: str) -> None:
+        super().__init__(message)
+        self.kind = kind
+
+
+class NemoSynthesizer:
+    """Text to WAV bytes over `/v1/audio/speech`, and the voices `/v1/models` reports.
+
+    No fallback and no playback. A caller with somewhere else to send a sentence
+    (`NemoEngine`, which speaks through `say`) decides that itself; one that must not
+    change voice halfway (a voice-over file) gets the failure, with a `kind` it can
+    turn into its own reason.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        client: httpx2.AsyncClient | None = None,
+        api_key: str | None = None,
+        model: str = "magpie",
+        timeout: float = DEFAULT_TIMEOUT,
+    ) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._client = client or httpx2.AsyncClient(timeout=timeout)
+        self._model = model
+        self._timeout = timeout
+        self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+    async def synthesize(self, text: str, *, voice: str | None) -> bytes:
+        try:
+            response = await self._client.post(
+                f"{self._base_url}/v1/audio/speech",
+                json={
+                    "model": self._model,
+                    "input": text,
+                    "voice": voice,
+                    "response_format": "wav",
+                },
+                headers=self._headers,
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+        except httpx2.TimeoutException as error:
+            raise SynthesisFailed(
+                f"the speech server did not answer within {self._timeout:g}s",
+                kind=SynthesisFailed.TIMEOUT,
+            ) from error
+        except httpx2.HTTPStatusError as error:
+            raise SynthesisFailed(
+                f"the speech server refused the request: {error.response.status_code} "
+                f"{error.response.text[:200]}",
+                kind=SynthesisFailed.REFUSED,
+            ) from error
+        except (httpx2.HTTPError, OSError) as error:
+            raise SynthesisFailed(
+                f"could not reach the speech server: {error}", kind=SynthesisFailed.UNREACHABLE
+            ) from error
+        return response.content
+
+    async def list_voices(self) -> list[str]:
+        try:
+            response = await self._client.get(
+                f"{self._base_url}/v1/models", headers=self._headers, timeout=self._timeout
+            )
+            response.raise_for_status()
+            models = response.json().get("data", [])
+        except (httpx2.HTTPError, ValueError) as error:
+            logger.warning("could not list speech server voices: %s", error)
+            return []
+        for model in models:
+            if model.get("capability") == "speech":
+                return list(model.get("voices", []))
+        return []
+
+
 class NemoEngine:
     """Synthesises to a WAV file and plays it.
 
@@ -65,20 +148,18 @@ class NemoEngine:
         on_unavailable: Callable[[], None] | None = None,
         player: Player | None = None,
     ) -> None:
-        self._base_url = base_url.rstrip("/")
-        self._client = client or httpx2.AsyncClient(timeout=timeout)
-        self._model = model
+        self._speech = NemoSynthesizer(
+            base_url=base_url, client=client, api_key=api_key, model=model, timeout=timeout
+        )
         self.default_voice = default_voice
-        self._timeout = timeout
         self._fallback = fallback or SayEngine()
         self._player = player if player is not None else resolve_player()
         self._on_unavailable = on_unavailable
-        self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
     async def prepare(self, text: str, *, voice: str | None, rate: float | None) -> Utterance:
         try:
-            audio = await self._synthesize(text, voice)
-        except (httpx2.HTTPError, OSError) as error:
+            audio = await self._speech.synthesize(text, voice=voice or self.default_voice)
+        except SynthesisFailed as error:
             logger.warning("speech server unavailable, using say instead: %s", error)
             if self._on_unavailable is not None:
                 self._on_unavailable()
@@ -106,33 +187,5 @@ class NemoEngine:
             voice=voice or self.default_voice,
         )
 
-    async def _synthesize(self, text: str, voice: str | None) -> bytes:
-        response = await self._client.post(
-            f"{self._base_url}/v1/audio/speech",
-            json={
-                "model": self._model,
-                "input": text,
-                "voice": voice or self.default_voice,
-                "response_format": "wav",
-            },
-            headers=self._headers,
-            timeout=self._timeout,
-        )
-        response.raise_for_status()
-        return response.content
-
     async def list_voices(self) -> list[str]:
-        try:
-            response = await self._client.get(
-                f"{self._base_url}/v1/models", headers=self._headers, timeout=self._timeout
-            )
-            response.raise_for_status()
-            models = response.json().get("data", [])
-        except (httpx2.HTTPError, ValueError) as error:
-            logger.warning("could not list speech server voices: %s", error)
-            return []
-
-        for model in models:
-            if model.get("capability") == "speech":
-                return list(model.get("voices", []))
-        return []
+        return await self._speech.list_voices()

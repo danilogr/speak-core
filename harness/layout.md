@@ -63,7 +63,7 @@
 | [`__init__.py`](../src/speak_core/engines/__init__.py) | `build_engine`: picks the engine a plugin's voice settings name, falling back to `say`. |
 | [`base.py`](../src/speak_core/engines/base.py) | Core engine protocol (`Engine`) and data structure (`Utterance`) defining the synthesis interface. |
 | [`say.py`](../src/speak_core/engines/say.py) | macOS native speech engine using the built-in `/usr/bin/say` executable. Supports voice listing and filtering by locale. |
-| [`nemo.py`](../src/speak_core/engines/nemo.py) | Client for local NeMo-Speech.cpp HTTP server: synthesizes speech via MagpieTTS and manages temporary WAV files for playback. |
+| [`nemo.py`](../src/speak_core/engines/nemo.py) | Client for local NeMo-Speech.cpp HTTP server: synthesizes speech via MagpieTTS and manages temporary WAV files for playback; and `NemoSynthesizer`, the no-fallback synthesis call. |
 | [`command.py`](../src/speak_core/engines/command.py) | Custom command engine: invokes any arbitrary command line (e.g., Piper, espeak-ng) passing the text as an argument. |
 | [`asr.py`](../src/speak_core/engines/asr.py) | Speech-to-text client sending audio to the shared NeMo server via OpenAI-compatible `/v1/audio/transcriptions`. |
 
@@ -98,6 +98,7 @@ Offline tests executed with `uv run pytest`:
 | [`tests/test_engine_selection.py`](../tests/test_engine_selection.py) | `build_engine`: which engine each voice setting selects, and the `say` fallback. |
 | [`tests/test_engines_say.py`](../tests/test_engines_say.py) | The `say` engine. |
 | [`tests/test_engines_nemo.py`](../tests/test_engines_nemo.py) | The `nemo` engine under normal, degraded, and fallback conditions. |
+| [`tests/test_synthesizer.py`](../tests/test_synthesizer.py) | `NemoSynthesizer`: the request it sends and the `SynthesisFailed` kinds it raises. |
 | [`tests/test_engines_command.py`](../tests/test_engines_command.py) | The `command` engine. |
 | [`tests/test_asr.py`](../tests/test_asr.py) | The transcription client and the speech server liveness check. |
 | [`tests/test_text.py`](../tests/test_text.py) | Whitespace collapsing and the length cap. |

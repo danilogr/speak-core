@@ -60,4 +60,4 @@ def test_the_command_engine_names_the_plugins_own_setting():
 
 def test_the_nemo_engine_talks_to_the_shared_server():
     engine = engine_for({"SPEAK_ENGINE": "nemo", "NEMO_HTTP_URL": "http://127.0.0.1:9100"})
-    assert engine._base_url == "http://127.0.0.1:9100"
+    assert engine._speech._base_url == "http://127.0.0.1:9100"

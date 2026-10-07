@@ -7,13 +7,13 @@ MagpieTTS for speech, Nemotron 3.5 for recognition.
 It is a library, not a plugin: no MCP server, no tools, no commands. A plugin depends
 on it by git tag:
 
-    speak-core @ git+https://github.com/danilogr/speak-core@v0.2.0
+    speak-core @ git+https://github.com/danilogr/speak-core@v0.3.0
 
 ## What it provides
 
 | Module | What it does |
 |---|---|
-| `engines` | Speech engines (`say`, `nemo`, `command`) and the transcription client |
+| `engines` | Speech engines (`say`, `nemo`, `command`), the no-fallback `NemoSynthesizer` for writing audio files, and the transcription client |
 | `supervisor`, `runtime` | One NeMo-Speech.cpp server per machine, shared by every plugin and session |
 | `queue`, `player`, `text`, `speaker` | Ordered playback, one utterance at a time across every process |
 | `exclusive` | One holder at a time across processes |

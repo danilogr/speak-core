@@ -115,6 +115,7 @@ async def test_a_failure_inside_the_lock_directory_is_retried_not_played_unlocke
     real = speaker._lock.acquire
     failures = [
         FileNotFoundError(errno.ENOENT, "owner file vanished"),
+        FileNotFoundError("x"),
         OSError(errno.ENOTEMPTY, "Directory not empty"),
     ]
 
@@ -171,5 +172,8 @@ async def test_a_failure_that_is_no_race_plays_at_once_with_a_warning(tmp_path, 
         raise OSError(code, os.strerror(code))
 
     speaker._lock.acquire = broken  # type: ignore[method-assign]
-    assert await asyncio.wait_for(speaker.acquire(asyncio.Event()), 1.0) is True
-    assert "playing anyway" in caplog.text
+    for _ in range(3):
+        assert await asyncio.wait_for(speaker.acquire(asyncio.Event()), 1.0) is True
+        speaker.release()
+    warnings = [r for r in caplog.records if "playing anyway" in r.getMessage()]
+    assert len(warnings) == 1

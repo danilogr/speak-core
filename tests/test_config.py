@@ -195,3 +195,16 @@ def test_random_is_recognised_case_insensitively_and_never_kept_as_a_name():
     settings = voice({"WALKIE_VOICE": "Random"})
     assert settings.randomize_voice is True
     assert settings.voice is None
+
+
+def test_a_plugin_can_default_to_another_engine():
+    assert VoiceSettings.from_env({}, prefix="VOICEBOX", default_engine="nemo").engine == "nemo"
+
+
+def test_a_set_engine_wins_over_the_plugins_default():
+    env = {"VOICEBOX_ENGINE": "Say"}
+    assert VoiceSettings.from_env(env, prefix="VOICEBOX", default_engine="nemo").engine == "say"
+
+
+def test_the_default_engine_is_still_say():
+    assert VoiceSettings.from_env({}, prefix="WALKIE").engine == "say"

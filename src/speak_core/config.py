@@ -159,7 +159,9 @@ class VoiceSettings:
         return f"{self.prefix}_{name}"
 
     @classmethod
-    def from_env(cls, env: Mapping[str, str], *, prefix: str) -> "VoiceSettings":
+    def from_env(
+        cls, env: Mapping[str, str], *, prefix: str, default_engine: str = "say"
+    ) -> "VoiceSettings":
         def key(name: str) -> str:
             return f"{prefix}_{name}"
 
@@ -173,7 +175,7 @@ class VoiceSettings:
         randomize = (wanted or "").lower() == RANDOM_VOICE
         return cls(
             prefix=prefix,
-            engine=(env_text(env, key("ENGINE")) or "say").lower(),
+            engine=(env_text(env, key("ENGINE")) or default_engine).lower(),
             voice=None if randomize else wanted,
             randomize_voice=randomize,
             voice_pool=env_list(env, key("VOICE_POOL")),

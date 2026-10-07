@@ -7,7 +7,7 @@ MagpieTTS for speech, Nemotron 3.5 for recognition.
 It is a library, not a plugin: no MCP server, no tools, no commands. A plugin depends
 on it by git tag:
 
-    speak-core @ git+https://github.com/danilogr/speak-core@v0.1.0
+    speak-core @ git+https://github.com/danilogr/speak-core@v0.2.0
 
 ## What it provides
 

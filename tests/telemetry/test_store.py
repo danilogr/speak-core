@@ -209,3 +209,13 @@ def test_a_rejected_row_leaves_the_backlog_and_the_cap() -> None:
     assert [r["utterance_id"] for r in store.unshipped_rows(conn, UTTERANCES.rows)] == ["good"]
     (count,) = conn.execute("SELECT COUNT(*) FROM utterances").fetchone()
     assert count == 2  # the cap counted only the backlog, so nothing was pruned
+
+
+def test_timestamps_are_utc_with_a_z():
+    import re
+
+    stamp = store.now_iso()
+    assert stamp.endswith("Z")
+    assert re.fullmatch(
+        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?Z", stamp
+    )

@@ -34,7 +34,23 @@ async def http_transport(url: str, body: bytes) -> TransportResponse:
             )
     except httpx2.HTTPError as error:
         raise OSError(str(error)) from error
-    return TransportResponse(status=response.status_code, body=response.content)
+    return TransportResponse(
+        status=response.status_code,
+        body=response.content,
+        retry_after=retry_after_seconds(response.headers.get("retry-after")),
+    )
+
+
+def retry_after_seconds(value: str | None) -> float | None:
+    """A `Retry-After` header given in seconds. The HTTP-date form is not used by the
+    telemetry Worker and is ignored, as is anything unparsable or negative."""
+    if value is None:
+        return None
+    try:
+        seconds = float(value.strip())
+    except ValueError:
+        return None
+    return seconds if seconds >= 0 else None
 
 
 # The contract's `harness` enum.

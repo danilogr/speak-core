@@ -173,18 +173,20 @@ plugin stores is its own.
   several processes may record (a crashed job) inserts with `if_absent`, which ignores
   the id conflict and nothing else. `PRAGMA foreign_keys = ON` is set on every
   connection this module opens, matching D1's unconditional enforcement in production.
+  Timestamps are UTC with a `Z`.
 - **`wiring.py`** — composition every plugin shares: the HTTP transport, harness and
   locale detection, and `start_install`, which loads consent, refreshes the machine
   probe, opens the store and upserts the `installs` row.
 - **`ship.py`** — projects the current install's backlog of the schema's row table to
   the wire format (dropping every local column) and POSTs it in chunks, off the hot path: chunks of rows
   first, each carrying the sessions its rows belong to, then any changed session no
-  chunk carried, on its own. Takes an injected transport. A `429`, a `5xx` or an
-  unreachable server leaves the rest unshipped for the next session to retry, which
-  is the entire retry mechanism; a `400` sets that chunk aside and the run goes on,
-  because a payload the server refuses will be refused again and would otherwise
-  hold back every row behind it. Rows are set aside with `rejected_at`; sessions
-  refused on their own are marked sent.
+  chunk carried, on its own. Takes an injected transport. A `400` or `413` sets that
+  chunk aside and the run goes on, because a payload the server refuses will be refused
+  again and would otherwise hold back every row behind it; a `429`, a `5xx` or an
+  unreachable server is retried with backoff (at least its `Retry-After`, up to 60 s)
+  and then left for the next session, which is the rest of the retry mechanism; a `202`
+  that accepted fewer rows than were sent ships the chunk and ends the run. Rows are
+  set aside with `rejected_at`; sessions refused on their own are marked sent.
 - **`ping.py`** — the anonymous install ping (see the decision below). Whether one is
   due is a file read, made before anything creates the consent file it consults; the
   request itself (`send`) is for the plugin to run as a background task.

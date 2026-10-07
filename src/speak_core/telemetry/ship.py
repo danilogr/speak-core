@@ -3,8 +3,10 @@
 Runs once per session, in the background, off the hot path (spec 7). A failure to
 deliver leaves the affected rows unshipped; the next session's attempt is the entire
 retry mechanism (spec 11) - there is no separate queue to keep in step with the
-local store. A chunk the server refuses as malformed (`400`) is set aside instead,
-so one bad row cannot hold back every row after it.
+local store. A `400` or `413` sets that chunk aside, so one bad row cannot hold back
+every row after it; a `429`, a `5xx` or an unreachable server is retried with backoff
+(at least its `Retry-After`) and then left for the next session; a `202` that accepted
+fewer rows than were sent ships the chunk and ends the run.
 
 What ships is this install's backlog of the schema's row table, then any of its
 sessions that are new or changed and were not already carried by a chunk of rows - a
@@ -37,6 +39,9 @@ CHUNK_BYTES = 48_000
 
 MAX_ATTEMPTS = 5
 BASE_BACKOFF = 1.0
+# A server asking for a longer wait than this is better answered next session than by
+# holding a background task.
+MAX_RETRY_AFTER_S = 60.0
 
 # `install` never carries `country`: the server derives it from CF-IPCountry on
 # receipt, and the client never collects or sends it (spec 1.2, 4.5).
@@ -71,6 +76,7 @@ CONTRACT_ARCH = frozenset({"arm64", "x86_64"})
 class TransportResponse:
     status: int
     body: bytes = b""
+    retry_after: float | None = None  # seconds, from a `Retry-After` header
 
 
 Transport = Callable[[str, bytes], Awaitable[TransportResponse]]
@@ -79,7 +85,8 @@ Sleep = Callable[[float], Awaitable[None]]
 
 class Delivery(Enum):
     ACCEPTED = "accepted"  # 202: mark it shipped
-    REJECTED = "rejected"  # 400: the payload is the problem; set it aside, go on
+    PARTIAL = "partial"  # 202 with accepted < rows sent: shipped, and the run ends
+    REJECTED = "rejected"  # 400 or 413: the payload is the problem; set it aside, go on
     FAILED = "failed"  # anything else, after retries: stop, the next session retries
 
 
@@ -167,22 +174,22 @@ def _backoff(attempt: int, rng: random.Random) -> float:
     return float(BASE_BACKOFF * (2**attempt) * (0.5 + rng.random()))
 
 
-def _log_quota_shortfall(response_body: bytes, expected: int) -> None:
-    """A `202` whose `accepted` is under `expected` is the per-install quota
-    soft-dropping the excess, not a failure (CONTRACT.md, "the per-install quota
-    does not fail the request"). It is never retried and never leaves rows
-    unshipped - only logged, so a quota that is biting is still diagnosable.
-    """
+def _accepted(response_body: bytes) -> int | None:
     try:
         accepted = json.loads(response_body).get("accepted")
     except (json.JSONDecodeError, AttributeError):
-        return
-    if isinstance(accepted, int) and accepted < expected:
-        logger.debug(
-            "telemetry: server accepted %d of %d rows in this chunk (per-install quota)",
-            accepted,
-            expected,
-        )
+        return None
+    return accepted if isinstance(accepted, int) else None
+
+
+def _log_refusal(status: int, response_body: bytes) -> None:
+    """The contract's error code and the JSON Pointer of the field it names, at debug."""
+    try:
+        error = json.loads(response_body).get("error") or {}
+        code, field = error.get("code"), error.get("field")
+    except (json.JSONDecodeError, AttributeError):
+        code, field = None, None
+    logger.debug("telemetry chunk refused (%d): %s at %s", status, code, field)
 
 
 async def _send_chunk(
@@ -206,19 +213,31 @@ async def _send_chunk(
             continue
 
         if response.status == 202:
-            # `accepted` may be less than `expected`: a soft-dropped quota, not a
-            # partial failure. The whole chunk is marked shipped either way.
-            _log_quota_shortfall(response.body, expected)
+            accepted = _accepted(response.body)
+            if accepted is not None and accepted < expected:
+                # The per-install quota soft-dropped this request (CONTRACT.md). The chunk
+                # is shipped - retrying re-sends into the same quota - and the run ends.
+                logger.debug(
+                    "telemetry: server accepted %d of %d rows; the daily quota is spent",
+                    accepted,
+                    expected,
+                )
+                return Delivery.PARTIAL
             return Delivery.ACCEPTED
-        if response.status == 400:
-            logger.debug("telemetry chunk refused as malformed: %s", response.body[:500])
+        if response.status in (400, 413):
+            _log_refusal(response.status, response.body)
             return Delivery.REJECTED
         if not _should_retry(response.status):
             logger.debug("telemetry chunk not delivered: status %d", response.status)
             return Delivery.FAILED
         if attempt == MAX_ATTEMPTS - 1:
             return Delivery.FAILED
-        await sleep(_backoff(attempt, rng))
+        wait = _backoff(attempt, rng)
+        if response.retry_after is not None:
+            if response.retry_after > MAX_RETRY_AFTER_S:
+                return Delivery.FAILED
+            wait = max(wait, response.retry_after)
+        await sleep(wait)
     return Delivery.FAILED
 
 
@@ -367,4 +386,4 @@ class _Sender:
         store.mark_sessions_shipped(self._conn, sessions, now)
         store.mark_shipped(self._conn, table, [row[table.id_column] for row in rows], now)
         self.shipped += len(rows)
-        return True
+        return delivery is not Delivery.PARTIAL

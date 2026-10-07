@@ -59,7 +59,8 @@ INSTALL_COLUMNS = (
 
 
 def now_iso() -> str:
-    return datetime.now(UTC).isoformat()
+    """Now, in UTC, as the contract's timestamp: `Z`, never a numeric offset."""
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _idempotent(sql: str) -> str:

@@ -67,7 +67,8 @@ class FakeTransport:
         self.calls.append((url, payload))
         if self._responses:
             return self._responses.pop(0)
-        return ship.TransportResponse(status=202, body=b'{"accepted": 1}')
+        accepted = len(payload.get("utterances", []))
+        return ship.TransportResponse(status=202, body=json.dumps({"accepted": accepted}).encode())
 
 
 async def no_sleep(_: float) -> None:
@@ -234,7 +235,7 @@ async def test_a_413_is_not_retried() -> None:
         sleep=no_sleep,
     )
     assert shipped == 0
-    assert len(transport.calls) == 1
+    assert [len(p["utterances"]) for _, p in transport.calls] == [1, 0]
 
 
 async def test_a_429_is_retried_with_backoff_and_then_succeeds() -> None:
@@ -335,14 +336,13 @@ async def test_debug_mode_never_calls_the_transport_and_marks_nothing_shipped() 
 
 
 async def test_a_session_travels_with_every_chunk_of_its_rows(monkeypatch) -> None:
-    """The first chunk may have been soft-dropped by the server's quota (`202`,
-    `accepted: 0`), and a later row whose session the server lacks is refused."""
+    """Each chunk is self-contained: a row whose session the server lacks is refused."""
     monkeypatch.setattr(ship, "CHUNK_ROWS", 1)
     rows = [utterance(seq=1), utterance(seq=2)]
     conn = seeded_conn(rows)
     transport = FakeTransport(
         [
-            ship.TransportResponse(status=202, body=b'{"accepted": 0}'),
+            ship.TransportResponse(status=202, body=b'{"accepted": 1}'),
             ship.TransportResponse(status=202, body=b'{"accepted": 1}'),
         ]
     )
@@ -562,3 +562,127 @@ async def test_debug_mode_logs_a_session_only_batch_and_marks_nothing(caplog) ->
     assert transport.calls == []
     assert "telemetry debug, not sent" in caplog.text
     assert len(store.unshipped_sessions(conn, "install-1")) == 1
+
+
+async def test_a_partial_accept_ships_its_chunk_and_ends_the_run() -> None:
+    """CONTRACT.md: `accepted` under the rows sent is the per-install quota soft-dropping.
+    The chunk is marked shipped (retrying re-sends into the same quota) and nothing more
+    is sent: every later request today would be dropped too."""
+    rows = [utterance(seq=i, utterance_id=f"u-{i}") for i in range(1, 151)]
+    conn = seeded_conn(rows)
+    transport = FakeTransport([ship.TransportResponse(status=202, body=b'{"accepted": 3}')])
+
+    shipped = await ship.ship(
+        conn,
+        schema=UTTERANCES,
+        install_id="install-1",
+        url=URL,
+        transport=transport,
+        sleep=no_sleep,
+    )
+
+    assert shipped == 100
+    assert len(transport.calls) == 1
+    assert len(store.unshipped_rows(conn, UTTERANCES.rows)) == 50
+
+
+async def test_a_full_accept_keeps_going() -> None:
+    rows = [utterance(seq=i, utterance_id=f"u-{i}") for i in range(1, 151)]
+    conn = seeded_conn(rows)
+    transport = FakeTransport(
+        [
+            ship.TransportResponse(status=202, body=b'{"accepted": 100}'),
+            ship.TransportResponse(status=202, body=b'{"accepted": 50}'),
+        ]
+    )
+    shipped = await ship.ship(
+        conn,
+        schema=UTTERANCES,
+        install_id="install-1",
+        url=URL,
+        transport=transport,
+        sleep=no_sleep,
+    )
+    assert shipped == 150
+
+
+async def test_a_413_sets_its_chunk_aside_like_a_400() -> None:
+    conn = seeded_conn([utterance()])
+    transport = FakeTransport([ship.TransportResponse(status=413)])
+    await ship.ship(
+        conn,
+        schema=UTTERANCES,
+        install_id="install-1",
+        url=URL,
+        transport=transport,
+        sleep=no_sleep,
+    )
+    (row,) = conn.execute("SELECT shipped_at, rejected_at FROM utterances").fetchall()
+    assert row["shipped_at"] is None and row["rejected_at"] is not None
+
+
+async def test_a_429_waits_at_least_its_retry_after() -> None:
+    conn = seeded_conn([utterance()])
+    slept: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    transport = FakeTransport(
+        [ship.TransportResponse(status=429, retry_after=30.0), ship.TransportResponse(status=202)]
+    )
+    await ship.ship(
+        conn, schema=UTTERANCES, install_id="install-1", url=URL, transport=transport, sleep=sleep
+    )
+    assert slept and slept[0] >= 30.0
+
+
+async def test_a_retry_after_past_the_ceiling_leaves_the_rest_for_next_session() -> None:
+    conn = seeded_conn([utterance()])
+    slept: list[float] = []
+
+    async def sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    transport = FakeTransport([ship.TransportResponse(status=429, retry_after=3600.0)])
+    shipped = await ship.ship(
+        conn, schema=UTTERANCES, install_id="install-1", url=URL, transport=transport, sleep=sleep
+    )
+    assert (shipped, slept, len(transport.calls)) == (0, [], 1)
+    assert len(store.unshipped_rows(conn, UTTERANCES.rows)) == 1
+
+
+async def test_a_400_logs_the_contracts_code_and_field(caplog) -> None:
+    import logging
+
+    caplog.set_level(logging.DEBUG, logger="speak_core")
+    body = b'{"error": {"code": "schema_violation", "message": "x", "field": "/jobs/0/voice"}}'
+    conn = seeded_conn([utterance()])
+    transport = FakeTransport([ship.TransportResponse(status=400, body=body)])
+    await ship.ship(
+        conn,
+        schema=UTTERANCES,
+        install_id="install-1",
+        url=URL,
+        transport=transport,
+        sleep=no_sleep,
+    )
+    assert "schema_violation at /jobs/0/voice" in caplog.text
+
+
+@pytest.mark.parametrize(
+    ("header", "seconds"),
+    [
+        ("30", 30.0),
+        (" 5 ", 5.0),
+        ("0", 0.0),
+        (None, None),
+        ("soon", None),
+        ("Wed, 21 Oct 2026 07:28:00 GMT", None),
+        ("-3", None),
+    ],
+)
+def test_retry_after_is_read_as_seconds_only(header, seconds) -> None:
+    from speak_core.telemetry.wiring import retry_after_seconds
+
+    assert retry_after_seconds(header) == seconds

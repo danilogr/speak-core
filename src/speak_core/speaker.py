@@ -8,6 +8,7 @@ lock whose holder has died is reclaimed.
 """
 
 import asyncio
+import errno
 import logging
 import os
 import time
@@ -21,6 +22,12 @@ logger = logging.getLogger(__name__)
 
 LOCK_DIRNAME = "speaker"
 WAITING_DIRNAME = "speaker-waiting"
+
+# What a concurrent claim or release produces inside the lock directory: the owner file
+# gone (ENOENT), the directory re-created (EEXIST), or a release's `rmdir` meeting a
+# claimer's half-written owner file (ENOTEMPTY). Anything else in a usable shared
+# directory - a full disk, an I/O error - will not clear by waiting.
+RACE_ERRNOS = frozenset({errno.ENOENT, errno.EEXIST, errno.ENOTEMPTY})
 
 # How often a waiting queue tries the lock again. A stop does not wait for the next
 # try: the wait ends as soon as the queue's stop event is set.
@@ -119,7 +126,7 @@ class SpeakerLock:
         except (SpeakerBusyError, ClaimInProgressError):
             return False
         except OSError as error:
-            if self._shared_dir_usable():
+            if self._is_race(error) and self._shared_dir_usable():
                 # The lock directory changed under this claim: its holder released, or
                 # another waiter claimed it, between two of this process's steps.
                 logger.debug("the speaker lock changed while claiming it, retrying: %s", error)
@@ -129,6 +136,14 @@ class SpeakerLock:
             self._warned = True
             log("cannot coordinate speech with other processes, playing anyway: %s", error)
         return True
+
+    @staticmethod
+    def _is_race(error: OSError) -> bool:
+        """FileNotFoundError and FileExistsError are races even when raised without an
+        errno."""
+        return isinstance(error, (FileNotFoundError, FileExistsError)) or (
+            error.errno in RACE_ERRNOS
+        )
 
     def _shared_dir_usable(self) -> bool:
         """True when the shared directory exists and this process may create entries

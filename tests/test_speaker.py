@@ -2,6 +2,7 @@
 two processes that both have a lot to say take turns."""
 
 import asyncio
+import errno
 import os
 import time
 from collections.abc import Callable
@@ -112,7 +113,10 @@ async def test_a_failure_inside_the_lock_directory_is_retried_not_played_unlocke
     contention, not a broken shared directory."""
     speaker = lock(tmp_path, 2)
     real = speaker._lock.acquire
-    failures = [FileNotFoundError("owner file vanished"), OSError(22, "Invalid argument")]
+    failures = [
+        FileNotFoundError(errno.ENOENT, "owner file vanished"),
+        OSError(errno.ENOTEMPTY, "Directory not empty"),
+    ]
 
     def racing() -> None:
         if failures:
@@ -154,3 +158,18 @@ async def test_a_shared_directory_this_process_cannot_write_never_silences_speec
         assert "playing anyway" in caplog.text
     finally:
         shared.chmod(0o700)
+
+
+@pytest.mark.parametrize("code", [errno.ENOSPC, errno.EIO, errno.EINVAL])
+async def test_a_failure_that_is_no_race_plays_at_once_with_a_warning(tmp_path, caplog, code):
+    """Review focus: a full disk or an I/O error inside a usable shared directory is not
+    another process mid-claim. Retrying it would hold every sentence until a stop; it is
+    played uncoordinated instead, with the one warning a broken directory gets."""
+    speaker = lock(tmp_path, 2)
+
+    def broken() -> None:
+        raise OSError(code, os.strerror(code))
+
+    speaker._lock.acquire = broken  # type: ignore[method-assign]
+    assert await asyncio.wait_for(speaker.acquire(asyncio.Event()), 1.0) is True
+    assert "playing anyway" in caplog.text

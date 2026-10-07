@@ -36,10 +36,9 @@ tools and no commands, and it never reads the environment: plugins pass it a map
 - **`speaker`** — the machine's speakers, claimed for one utterance at a time across
   processes: an `ExclusiveLock` (not re-entrant, with an ownerless grace) in the shared
   state directory, plus a `speaker-waiting/<pid>` marker per waiting process. It must
-  never silence speech: a shared directory it cannot use is a warning and an
-  uncoordinated utterance. It must never let two processes play at once either: any
-  failure inside the lock directory, where a usable shared directory proves it is
-  another process's claim or release, is waited out.
+  never silence speech: a shared directory it cannot use, or an error inside it that is
+  not a concurrent claim or release (`RACE_ERRNOS`), is a warning and an uncoordinated
+  utterance; a race is retried at the next poll.
 - **`supervisor.NemoSupervisor`** — starts, shares, and stops the local speech server.
   `warm(reachable)` is the start a caller that can ask the port first uses. It must not
   synthesize or play anything.

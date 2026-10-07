@@ -84,7 +84,15 @@ def test_processes_polling_one_directory_never_hold_the_speakers_together(tmp_pa
         )
         for _ in range(PROCESSES)
     ]
-    results = [child.communicate(timeout=55) for child in children]
+    try:
+        results = [child.communicate(timeout=55) for child in children]
+    finally:
+        # A child wedged on the lock would otherwise outlive the test run, holding
+        # speaker/ in a temp directory nobody cleans.
+        for child in children:
+            if child.poll() is None:
+                child.kill()
+                child.wait()
     for child, (_, err) in zip(children, results, strict=True):
         assert child.returncode == 0, err
     overlaps = sum(int(out.split()[0]) for out, _ in results)

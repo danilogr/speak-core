@@ -34,9 +34,12 @@ tools and no commands, and it never reads the environment: plugins pass it a map
   finished. It must not know which engine produced an utterance. With a speaker lock it
   waits for the speakers before each player starts; a `stop()` ends that wait at once.
 - **`speaker`** — the machine's speakers, claimed for one utterance at a time across
-  processes: an `ExclusiveLock` (not re-entrant) in the shared state directory, plus a
-  `speaker-waiting/<pid>` marker per waiting process. It must never silence speech: a
-  directory it cannot use is a warning and an uncoordinated utterance.
+  processes: an `ExclusiveLock` (not re-entrant, with an ownerless grace) in the shared
+  state directory, plus a `speaker-waiting/<pid>` marker per waiting process. It must
+  never silence speech: a shared directory it cannot use is a warning and an
+  uncoordinated utterance. It must never let two processes play at once either: any
+  failure inside the lock directory, where a usable shared directory proves it is
+  another process's claim or release, is waited out.
 - **`supervisor.NemoSupervisor`** — starts, shares, and stops the local speech server.
   It must not synthesize or play anything.
 - **`player`** — resolves one command that plays a WAV, per platform, from the binaries
@@ -50,6 +53,8 @@ tools and no commands, and it never reads the environment: plugins pass it a map
   the only module that installs one.
 - **`exclusive`** — one holder at a time across processes, elected by an atomic
   `mkdir`. The speaker lock is an instance of it, and so is any lock a plugin builds.
+  With `ownerless_grace`, a lock directory with no owner file is a claim in progress
+  until it has gone that long unchanged; without it, such a lock is reclaimed at once.
 - **`setup`** — `speak-core-setup`: runs the packaged `install-nemo.sh` with bash.
 
 Components communicate by direct async call. The only indirection is the supervisor's
@@ -123,7 +128,8 @@ Almost nothing is persistent.
   - `starting/` — a lock directory. Its existence means a session is mid-start; its
     mtime dates the attempt so an abandoned lock can be taken over.
   - `speaker/owner` — the pid of the process playing an utterance. Its directory is the
-    lock, reclaimed when its holder has died.
+    lock, reclaimed when its holder has died, or when it has had no owner file for
+    `OWNERLESS_GRACE` (2 s) because a claimer died mid-claim.
   - `speaker-waiting/<pid>` — one empty file per process waiting for the speakers.
 
 ## Telemetry
@@ -308,6 +314,18 @@ plugin stores is its own.
   quarter of a second, which is what makes the turns alternate. Rejected: one queue per
   machine in a daemon, which is new infrastructure; and holding the lock for a whole
   batch, which makes a status line wait for a whole read-aloud.
+
+- **An ownerless speaker lock is busy until it is stale.** Election is `mkdir`, then
+  the owner file, and release removes them in the other order, so every claim and
+  release passes through a moment where the directory exists with no owner. Reclaiming
+  it at once lets two processes hold the speakers: three processes at production poll
+  and handoff values overlap about 2 times in 900 utterances that way. So a directory with no owner file
+  is reclaimed only after `OWNERLESS_GRACE` (2 s) without a change, which only a
+  claimer that died mid-claim leaves; a failure inside the lock directory is retried
+  rather than played unlocked, and only a shared directory that cannot be used plays
+  uncoordinated. The cost: a crash in that gap delays the next utterance by up to 2 s.
+  Known limitation: two processes reclaiming the same dead holder's lock at once can
+  both take it, the window the start lock's takeover also accepts.
 
 - **Speech server settings are unprefixed and its state lives in a shared directory.**
   Whichever plugin starts the server decides its arguments for every plugin using it,

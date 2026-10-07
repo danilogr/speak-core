@@ -103,7 +103,8 @@ Offline tests executed with `uv run pytest`:
 | [`tests/test_player.py`](../tests/test_player.py) | Finding a sound player per platform with an injected lookup. |
 | [`tests/test_queue.py`](../tests/test_queue.py) | FIFO playback order, depth-1 prefetch pipelining, and `stop` cancellation. |
 | [`tests/test_exclusive.py`](../tests/test_exclusive.py) | One holder at a time across processes, elected by an atomic `mkdir`. |
-| [`tests/test_speaker.py`](../tests/test_speaker.py) | The speaker lock: waiting, immediate stop, dead-holder reclaim, alternating turns, and an unusable directory. |
+| [`tests/test_speaker.py`](../tests/test_speaker.py) | The speaker lock: waiting, immediate stop, dead-holder reclaim, alternating turns, a claim in progress, failures inside the lock directory, and an unusable shared directory. |
+| [`tests/test_speaker_stress.py`](../tests/test_speaker_stress.py) | The speaker lock across real processes: three processes polling one directory never hold it together and never play unlocked. |
 | [`tests/test_supervisor.py`](../tests/test_supervisor.py) | NeMo server process management, election locks, PID tracking, and graceful shutdowns. |
 | [`tests/test_setup.py`](../tests/test_setup.py) | `speak-core-setup`: the installer travels inside the package and is run with bash. |
 

@@ -7,12 +7,24 @@ atomic `mkdir` elects one holder, and a lock whose owner has died is reclaimed.
 
 import logging
 import os
+import time
 from collections.abc import Callable
 from pathlib import Path
 from types import TracebackType
 from typing import Self
 
 logger = logging.getLogger(__name__)
+
+
+class ClaimInProgressError(RuntimeError):
+    """The lock exists but names no owner yet, and has not for long enough to be stale.
+
+    Another process is between its `mkdir` and its owner write, or between removing
+    its owner file and its `rmdir`.
+    """
+
+    def __init__(self, directory: Path) -> None:
+        super().__init__(f"the {directory.name} lock is being claimed or released")
 
 
 class ExclusiveLock:
@@ -23,6 +35,14 @@ class ExclusiveLock:
     all. A lock one process claims on another's behalf passes `reentrant=False`,
     because there the pid in the file is not the work: two calls inside one process
     would both find their own pid and both believe they had won.
+
+    A lock directory with no owner file is ambiguous: a claimer that died before
+    recording itself, or a live one in the gap between its `mkdir` and its owner
+    write (or between its owner unlink and its `rmdir`). With `ownerless_grace` set,
+    such a lock is reclaimed only once it has gone that many seconds without a
+    change, and until then `acquire` raises `ClaimInProgressError`. Without it, an
+    ownerless lock is reclaimed at once, so a process racing another's claim can take
+    the lock too.
     """
 
     def __init__(
@@ -33,6 +53,7 @@ class ExclusiveLock:
         busy: Callable[[int], Exception],
         pid: int | None = None,
         reentrant: bool = True,
+        ownerless_grace: float | None = None,
     ) -> None:
         self._dir = Path(directory)
         self._owner_file = self._dir / "owner"
@@ -40,6 +61,7 @@ class ExclusiveLock:
         self._busy = busy
         self._pid = pid if pid is not None else os.getpid()
         self._reentrant = reentrant
+        self._ownerless_grace = ownerless_grace
 
     def owner(self) -> int | None:
         """The pid recorded in the lock, or None when there is none to read."""
@@ -49,28 +71,49 @@ class ExclusiveLock:
             return None
 
     def acquire(self) -> None:
-        """Claim the lock, or raise whatever `busy` builds for the live holder."""
+        """Claim the lock, or raise whatever `busy` builds for the live holder.
+
+        Raises `ClaimInProgressError` for an ownerless lock inside `ownerless_grace`.
+        """
         self._dir.parent.mkdir(parents=True, exist_ok=True)
         try:
             self._dir.mkdir()
         except FileExistsError:
-            held_by = self.owner()
-            ours = held_by == self._pid and self._reentrant
-            if held_by is not None and not ours and self._is_alive(held_by):
-                raise self._busy(held_by) from None
-            # Two reclaimers racing could both take over a dead owner's lock: the
-            # window the supervisor's stale-start-lock takeover already accepts.
-            # There is a second window here too, with no dead owner involved at
-            # all: between another process's `mkdir` and its own `_write_owner()`,
-            # `owner()` reads None because there is no owner file yet, and that
-            # reads the same as no owner ever having claimed the lock - so a
-            # process racing it in that gap reclaims a lock that was just taken.
-            # Inherited from MicLock, where the cost of losing this race was one
-            # garbled recording; for a transcription job it is two jobs running
-            # at once.
-            if held_by != self._pid:
-                logger.info("reclaiming the %s lock left by %s", self._dir.name, held_by)
+            self._reclaim()
         self._write_owner()
+
+    def _reclaim(self) -> None:
+        """Decide whether an existing lock may be taken over, raising if it may not."""
+        grace = self._ownerless_grace
+        held_by = self.owner()
+        if held_by is None:
+            if grace is None:
+                return
+            if not self._unchanged_for(grace):
+                raise ClaimInProgressError(self._dir)
+        elif held_by == self._pid and self._reentrant:
+            return
+        elif self._is_alive(held_by):
+            raise self._busy(held_by)
+        else:
+            # Two reclaimers racing could both take over a dead owner's lock: the
+            # window the supervisor's stale-start-lock takeover also accepts. It opens
+            # only after a holder has died.
+            logger.info("reclaiming the %s lock left by %s", self._dir.name, held_by)
+        if grace is not None:
+            self._clear_partials()
+
+    def _unchanged_for(self, seconds: float) -> bool:
+        # The directory's mtime moves with every entry created, renamed or removed in
+        # it, so it dates the last step of a claim or a release.
+        return time.time() - self._dir.stat().st_mtime >= seconds
+
+    def _clear_partials(self) -> None:
+        """Remove the half-written owner files a dead claimer left. One left behind
+        keeps every release from removing the directory, and each next claim would
+        then wait out the grace on an ownerless lock."""
+        for partial in self._dir.glob("owner.*"):
+            partial.unlink(missing_ok=True)
 
     def take_over(self, previous: int) -> None:
         """Become the holder of a lock `previous` claimed on this process's behalf.

@@ -3,8 +3,8 @@
 Each plugin runs its own playback queue in its own process, and nothing in one queue
 can see another. They coordinate through a lock in the shared state directory, held
 around each utterance's playback, so sentences from two plugins interleave instead of
-overlapping. Election is the atomic `mkdir` the speech server's start lock and the
-microphone lock use, and a lock whose holder has died is reclaimed.
+overlapping. Election is the atomic `mkdir` the speech server's start lock uses, and a
+lock whose holder has died is reclaimed.
 """
 
 import asyncio
@@ -14,7 +14,7 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from speak_core.exclusive import ExclusiveLock
+from speak_core.exclusive import ClaimInProgressError, ExclusiveLock
 from speak_core.supervisor import process_is_alive
 
 logger = logging.getLogger(__name__)
@@ -31,6 +31,13 @@ POLL_INTERVAL = 0.05
 # prepared, takes the lock back within milliseconds and a waiter that polls never gets
 # a turn. Several poll intervals, so a waiter asleep mid-poll still wakes inside it.
 HANDOFF_WINDOW = 0.25
+
+# How long a lock directory with no owner file must go unchanged before it is taken as
+# left by a process that died mid-claim. Until then it is another process between its
+# `mkdir` and its owner write, or between its owner unlink and its `rmdir`, and taking
+# it would put two processes on the speakers. A crash in either gap costs the next
+# utterance up to this long a wait.
+OWNERLESS_GRACE = 2.0
 
 
 class SpeakerBusyError(RuntimeError):
@@ -66,7 +73,9 @@ class SpeakerLock:
             busy=SpeakerBusyError,
             pid=self._pid,
             reentrant=False,
+            ownerless_grace=OWNERLESS_GRACE,
         )
+        self._shared_dir = Path(shared_dir)
         self._waiting_dir = Path(shared_dir) / WAITING_DIRNAME
         self._yield_until = 0.0
         self._warned = False
@@ -76,7 +85,8 @@ class SpeakerLock:
         `stopped` is set first.
 
         A shared directory that cannot be used is no reason to stay silent: the
-        failure is logged and the utterance plays uncoordinated.
+        failure is logged and the utterance plays uncoordinated. A failure inside a
+        usable one is another process claiming or releasing, and is waited out.
         """
         marker = self._waiting_dir / str(self._pid)
         marked: bool | None = None
@@ -106,19 +116,25 @@ class SpeakerLock:
     def _try_lock(self) -> bool:
         try:
             self._lock.acquire()
-        except SpeakerBusyError:
-            return False
-        except FileNotFoundError:
-            # The holder released between this process's `mkdir` failing and its owner
-            # file being written: a handoff race, not a broken directory (the parent is
-            # created first). Try again at the next poll.
+        except (SpeakerBusyError, ClaimInProgressError):
             return False
         except OSError as error:
+            if self._shared_dir_usable():
+                # The lock directory changed under this claim: its holder released, or
+                # another waiter claimed it, between two of this process's steps.
+                logger.debug("the speaker lock changed while claiming it, retrying: %s", error)
+                return False
             # Once per lock: a broken directory fails every utterance the same way.
             log = logger.debug if self._warned else logger.warning
             self._warned = True
             log("cannot coordinate speech with other processes, playing anyway: %s", error)
         return True
+
+    def _shared_dir_usable(self) -> bool:
+        """True when the shared directory exists and this process may create entries
+        in it. It is never removed, so unlike the lock directory a failed check is not
+        a race."""
+        return self._shared_dir.is_dir() and os.access(self._shared_dir, os.W_OK | os.X_OK)
 
     def _yielding(self) -> bool:
         return time.monotonic() < self._yield_until and self._others_waiting()

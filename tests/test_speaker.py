@@ -2,8 +2,11 @@
 two processes that both have a lot to say take turns."""
 
 import asyncio
+import os
 import time
 from collections.abc import Callable
+
+import pytest
 
 from speak_core.speaker import LOCK_DIRNAME, WAITING_DIRNAME, SpeakerLock
 
@@ -103,21 +106,51 @@ async def test_releasing_a_lock_this_process_does_not_hold_changes_nothing(tmp_p
     assert (tmp_path / LOCK_DIRNAME / "owner").read_text() == "1"
 
 
-async def test_a_handoff_race_is_retried_not_played_unlocked(tmp_path, caplog):
-    """The holder releasing between another process's failed `mkdir` and its owner
-    write surfaces as FileNotFoundError; that is contention, not a broken directory."""
+async def test_a_failure_inside_the_lock_directory_is_retried_not_played_unlocked(tmp_path, caplog):
+    """Review focus: the holder releasing, or another waiter claiming, between two of
+    this process's steps surfaces as an OSError from inside the lock directory; that is
+    contention, not a broken shared directory."""
     speaker = lock(tmp_path, 2)
     real = speaker._lock.acquire
-    attempts = []
+    failures = [FileNotFoundError("owner file vanished"), OSError(22, "Invalid argument")]
 
     def racing() -> None:
-        attempts.append(1)
-        if len(attempts) == 1:
-            raise FileNotFoundError("owner file vanished")
+        if failures:
+            raise failures.pop(0)
         real()
 
     speaker._lock.acquire = racing  # type: ignore[method-assign]
     assert await asyncio.wait_for(speaker.acquire(asyncio.Event()), 1.0) is True
-    assert len(attempts) == 2
+    assert not failures
     assert (tmp_path / LOCK_DIRNAME / "owner").read_text() == "2"
     assert "playing anyway" not in caplog.text
+
+
+async def test_a_lock_being_claimed_is_waited_for_until_it_goes_stale(tmp_path):
+    """Review focus: an ownerless lock directory is another process mid-claim, so it
+    is waited for; one that stays ownerless was left by a claimer that died."""
+    held = tmp_path / LOCK_DIRNAME
+    held.mkdir()
+    waiting = asyncio.create_task(lock(tmp_path, 2).acquire(asyncio.Event()))
+    await until(lambda: (tmp_path / WAITING_DIRNAME / "2").exists())
+    await asyncio.sleep(0.05)
+    assert not waiting.done()
+
+    stale = time.time() - 60
+    os.utime(held, (stale, stale))
+    assert await asyncio.wait_for(waiting, 1.0) is True
+    assert (held / "owner").read_text() == "2"
+
+
+async def test_a_shared_directory_this_process_cannot_write_never_silences_speech(tmp_path, caplog):
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    shared.chmod(0o500)
+    try:
+        if os.access(shared, os.W_OK):
+            pytest.skip("running as root: directory permissions do not apply")
+        speaker = lock(shared, 1)
+        assert await asyncio.wait_for(speaker.acquire(asyncio.Event()), 1.0) is True
+        assert "playing anyway" in caplog.text
+    finally:
+        shared.chmod(0o700)

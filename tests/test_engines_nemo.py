@@ -254,3 +254,11 @@ async def test_skips_entries_that_are_not_objects_when_listing_voices():
         return httpx2.Response(200, json={"data": ["junk", *MODELS["data"]]})
 
     assert await engine_over(handler).list_voices() == ["John", "Sofia", "Aria"]
+
+
+async def test_lists_only_the_voices_that_are_names():
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        listing = {"data": [{"capability": "speech", "voices": ["John", 7, None, {}, "Aria"]}]}
+        return httpx2.Response(200, json=listing)
+
+    assert await engine_over(handler).list_voices() == ["John", "Aria"]

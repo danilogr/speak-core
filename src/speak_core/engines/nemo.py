@@ -140,7 +140,9 @@ class NemoSynthesizer:
         for model in models:
             if isinstance(model, dict) and model.get("capability") == "speech":
                 voices = model.get("voices", [])
-                return list(voices) if isinstance(voices, list) else []
+                if not isinstance(voices, list):
+                    return []
+                return [voice for voice in voices if isinstance(voice, str)]
         return []
 
 

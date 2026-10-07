@@ -4,7 +4,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
-from telemetry_fixtures import UTTERANCES
+from telemetry_fixtures import UTTERANCES, is_closed, track_connections
 
 from speak_core.telemetry import store
 
@@ -61,6 +61,17 @@ def test_connect_is_idempotent_against_an_existing_file(tmp_path):
     store.connect(path, UTTERANCES).close()
     conn = store.connect(path, UTTERANCES)  # must not raise on the tables already being there
     conn.execute("SELECT 1 FROM installs")
+
+
+def test_a_file_that_is_not_a_database_is_refused_and_its_connection_closed(tmp_path, monkeypatch):
+    path = tmp_path / "telemetry.db"
+    path.write_bytes(b"this is not a database" * 100)
+    opened = track_connections(monkeypatch)
+
+    with pytest.raises(sqlite3.DatabaseError):
+        store.connect(path, UTTERANCES)
+
+    assert opened and all(is_closed(conn) for conn in opened)
 
 
 def test_foreign_keys_are_enforced_on_every_connection() -> None:

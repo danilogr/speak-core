@@ -206,21 +206,26 @@ def start_install(
         logger.debug("telemetry: could not open the local store: %s", error)
         return None
     now = store.now_iso()
-    existing = store.install_row(conn, consented.install_id)
-    store.upsert_install(
-        conn,
-        {
-            "install_id": consented.install_id,
-            "first_seen_at": existing["first_seen_at"] if existing else now,
-            "last_seen_at": now,
-            "plugin_version": plugin_version,
-            "disclosure_ver": consented.disclosure_ver,
-            "language": language(env),
-            "timezone": local_timezone(),
-            "utc_offset_min": utc_offset_min(),
-            **facts.to_mapping(),
-            "cpu_model": facts.cpu_model[:MACHINE_NAME_MAX_LENGTH],
-            "accel_name": facts.accel_name[:MACHINE_NAME_MAX_LENGTH],
-        },
-    )
+    try:
+        existing = store.install_row(conn, consented.install_id)
+        store.upsert_install(
+            conn,
+            {
+                "install_id": consented.install_id,
+                "first_seen_at": existing["first_seen_at"] if existing else now,
+                "last_seen_at": now,
+                "plugin_version": plugin_version,
+                "disclosure_ver": consented.disclosure_ver,
+                "language": language(env),
+                "timezone": local_timezone(),
+                "utc_offset_min": utc_offset_min(),
+                **facts.to_mapping(),
+                "cpu_model": facts.cpu_model[:MACHINE_NAME_MAX_LENGTH],
+                "accel_name": facts.accel_name[:MACHINE_NAME_MAX_LENGTH],
+            },
+        )
+    except BaseException:
+        # The caller gets no `Install` to close, so the connection is closed here.
+        conn.close()
+        raise
     return Install(conn=conn, consent=consented)

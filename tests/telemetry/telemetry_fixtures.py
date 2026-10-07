@@ -2,7 +2,11 @@
 utterance contract, one like a job contract - which the code under test must handle
 without knowing either."""
 
+import sqlite3
 from pathlib import Path
+from typing import Any
+
+import pytest
 
 from speak_core.telemetry.identity import TelemetryIdentity
 from speak_core.telemetry.schema import RowTable, TelemetrySchema
@@ -145,3 +149,26 @@ JOBS = TelemetrySchema(
         boolean_columns=("has_video",),
     ),
 )
+
+
+def track_connections(monkeypatch: pytest.MonkeyPatch) -> list[sqlite3.Connection]:
+    """Every SQLite connection opened from here on, so a test can see none is left open."""
+    opened: list[sqlite3.Connection] = []
+    real_connect = sqlite3.connect
+
+    def connect(*args: Any, **kwargs: Any) -> sqlite3.Connection:
+        conn = real_connect(*args, **kwargs)
+        opened.append(conn)
+        return conn
+
+    monkeypatch.setattr(sqlite3, "connect", connect)
+    return opened
+
+
+def is_closed(conn: sqlite3.Connection) -> bool:
+    # Reads no page, so a connection to a file that is not a database still answers.
+    try:
+        conn.total_changes  # noqa: B018 - the attribute read is the probe
+    except sqlite3.ProgrammingError:
+        return True
+    return False

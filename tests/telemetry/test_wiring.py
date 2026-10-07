@@ -1,8 +1,10 @@
 """What every plugin's telemetry composition shares: harness and locale detection and
 the install row brought up to date."""
 
+import sqlite3
+
 import pytest
-from telemetry_fixtures import IDENTITY, UTTERANCES
+from telemetry_fixtures import IDENTITY, UTTERANCES, is_closed, track_connections
 
 from speak_core.telemetry import store, wiring
 
@@ -72,6 +74,22 @@ def test_the_machine_probe_is_cached_across_sessions(tmp_path, monkeypatch) -> N
     second = start(tmp_path)
     assert second is not None
     assert calls["n"] == 1
+
+
+@pytest.mark.parametrize("failing", ["install_row", "upsert_install"])
+def test_an_install_row_that_cannot_be_written_closes_the_store(
+    tmp_path, monkeypatch, failing
+) -> None:
+    def locked(*args: object) -> None:
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(store, failing, locked)
+    opened = track_connections(monkeypatch)
+
+    with pytest.raises(sqlite3.OperationalError):
+        start(tmp_path)
+
+    assert opened and all(is_closed(conn) for conn in opened)
 
 
 @pytest.mark.parametrize(

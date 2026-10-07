@@ -82,10 +82,15 @@ def connect(path: Path, schema: TelemetrySchema) -> sqlite3.Connection:
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    conn.executescript(_idempotent(schema.sql))
-    conn.commit()
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.executescript(_idempotent(schema.sql))
+        conn.commit()
+    except BaseException:
+        # A file that is not a database fails here; the caller never sees `conn`.
+        conn.close()
+        raise
     return conn
 
 

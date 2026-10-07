@@ -103,10 +103,14 @@ async def send(ping: Ping, *, transport: Transport, debug: bool = False) -> bool
     if not 200 <= response.status < 300:
         logger.debug("telemetry: ping not counted: status %d", response.status)
         return False
+    # Written beside it and renamed over it: a torn marker reads as no marker, which
+    # would count this machine's install a second time.
+    partial = ping.marker.with_name(f".{MARKER_FILENAME}.partial")
     try:
         ping.marker.parent.mkdir(parents=True, exist_ok=True)
         marker = {"plugin_version": ping.payload["plugin_version"]}
-        ping.marker.write_text(json.dumps(marker), encoding="utf-8")
+        partial.write_text(json.dumps(marker), encoding="utf-8")
+        partial.replace(ping.marker)
     except OSError as error:
         logger.debug("telemetry: could not record the ping at %s: %s", ping.marker, error)
     return True

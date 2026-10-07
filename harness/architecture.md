@@ -195,7 +195,8 @@ plugin stores is its own.
   set aside with `rejected_at`; sessions refused on their own are marked sent.
 - **`ping.py`** — the anonymous install ping (see the decision below). Whether one is
   due is a read of `ping.json` alone; the request itself (`send`) is for the plugin to run
-  as a background task.
+  as a background task. The marker is written beside itself and renamed over, because a
+  torn one reads as no marker and would count the install twice.
 - **`report.py`** — the scaffolding behind a plugin's `<plugin>-stats`: finds the
   store, renders it with the plugin's own function, prints install id and mode.
 - **`notice.py`** — the first-run notice a plugin owes before it sends anything: `due` and
@@ -339,8 +340,9 @@ plugin stores is its own.
   serves both, through `NemoSynthesizer`. A spoken sentence that cannot reach the server is
   better said by `say` than lost, so `NemoEngine` falls back; an audio file that changes
   voice halfway is worse than an error, so a file writer calls `NemoSynthesizer` directly
-  and turns `SynthesisFailed.kind` (unreachable, timeout, refused) into its own reason. A 200 whose body does not open
-  as a RIFF/WAVE file is `refused`: it would be played as silence or saved as a bad file.
+  and turns `SynthesisFailed.kind` (unreachable, timeout, refused) into its own reason. A
+  200 whose body does not open as a RIFF/WAVE file is `refused`: it would be played as
+  silence or saved as a bad file.
   Rejected: a `fallback=None` mode on `NemoEngine`, which would also need a player it
   does not use.
 

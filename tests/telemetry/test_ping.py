@@ -109,6 +109,43 @@ def test_an_unreadable_marker_is_treated_as_no_marker(tmp_path):
     assert pending is not None and pending.payload["event"] == "install"
 
 
+async def test_an_upgrade_ping_leaves_only_the_marker_behind(tmp_path):
+    config_dir(tmp_path).mkdir(parents=True)
+    (config_dir(tmp_path) / ping.MARKER_FILENAME).write_text(
+        json.dumps({"plugin_version": "1.6.0"})
+    )
+    pending = due(tmp_path, version="1.7.0")
+    assert pending is not None
+
+    assert await ping.send(pending, transport=Transport(NO_CONTENT)) is True
+
+    assert [p.name for p in config_dir(tmp_path).iterdir()] == [ping.MARKER_FILENAME]
+    assert due(tmp_path, version="1.7.0") is None
+
+
+async def test_a_write_torn_halfway_keeps_the_previous_marker(tmp_path, monkeypatch):
+    """A marker that does not parse reads as no marker, so as an install: a torn write
+    over the old marker would count this machine's install a second time."""
+    config_dir(tmp_path).mkdir(parents=True)
+    (config_dir(tmp_path) / ping.MARKER_FILENAME).write_text(
+        json.dumps({"plugin_version": "1.6.0"})
+    )
+    pending = due(tmp_path, version="1.7.0")
+    assert pending is not None
+
+    def torn_write(self: Path, data: str, encoding: str | None = None) -> int:
+        with self.open("w", encoding=encoding) as handle:
+            handle.write(data[: len(data) // 2])
+        raise OSError("disk full")
+
+    monkeypatch.setattr(Path, "write_text", torn_write)
+    assert await ping.send(pending, transport=Transport(NO_CONTENT)) is True
+    monkeypatch.undo()
+
+    pending = due(tmp_path, version="1.7.0")
+    assert pending is not None and pending.payload["event"] == "upgrade"
+
+
 @pytest.mark.parametrize("mode", consent.MODES)
 def test_the_ping_is_due_whatever_the_telemetry_mode(tmp_path, mode):
     """`off` and `local` still count the install; only DO_NOT_TRACK does not."""

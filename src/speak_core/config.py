@@ -162,6 +162,11 @@ class VoiceSettings:
     def from_env(
         cls, env: Mapping[str, str], *, prefix: str, default_engine: str = "say"
     ) -> "VoiceSettings":
+        """A plugin's voice, read under its prefix: `<PREFIX>_ENGINE`, `<PREFIX>_VOICE`, ...
+
+        `default_engine` is the plugin's choice when `<PREFIX>_ENGINE` is unset.
+        """
+
         def key(name: str) -> str:
             return f"{prefix}_{name}"
 

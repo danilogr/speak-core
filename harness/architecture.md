@@ -36,13 +36,15 @@ tools and no commands, and it never reads the environment: plugins pass it a map
   playing, because a plugin that records opens the microphone only once the speaker has
   finished. It must not know which engine produced an utterance. With a speaker lock it
   waits for the speakers before each player starts; a `stop()` ends that wait at once.
+  A failure of any kind while claiming the speakers, starting a player or waiting on it
+  fails that utterance alone; the worker plays on.
 - **`speaker`** — the machine's speakers, claimed for one utterance at a time across
   processes: an `ExclusiveLock` (not re-entrant, with an ownerless grace) in the shared
   state directory, plus a `speaker-waiting/<pid>` marker per waiting process. It must
   never silence speech: a shared directory it cannot use, or an error inside it that is
   not a concurrent claim or release (`RACE_ERRNOS`), is a warning and an uncoordinated
   utterance; a race is retried at the next poll. No two processes overlap unless the lock
-  itself is unusable.
+  itself is unusable, or two processes reclaim a dead holder's lock at once.
 - **`supervisor.NemoSupervisor`** — starts, shares, and stops the local speech server.
   `warm(reachable)` is the start a caller that can ask the port first uses. It must not
   synthesize or play anything.
@@ -333,7 +335,8 @@ plugin stores is its own.
   serves both, through `NemoSynthesizer`. A spoken sentence that cannot reach the server is
   better said by `say` than lost, so `NemoEngine` falls back; an audio file that changes
   voice halfway is worse than an error, so a file writer calls `NemoSynthesizer` directly
-  and turns `SynthesisFailed.kind` (unreachable, timeout, refused) into its own reason.
+  and turns `SynthesisFailed.kind` (unreachable, timeout, refused) into its own reason. A 200 whose body does not open
+  as a RIFF/WAVE file is `refused`: it would be played as silence or saved as a bad file.
   Rejected: a `fallback=None` mode on `NemoEngine`, which would also need a player it
   does not use.
 
@@ -341,12 +344,12 @@ plugin stores is its own.
   the owner file, and release removes them in the other order, so every claim and
   release passes through a moment where the directory exists with no owner. Reclaiming
   it at once lets two processes hold the speakers: three processes at production poll
-  and handoff values overlap about 2 times in 900 utterances that way. So a directory with no owner file
-  is reclaimed only after `OWNERLESS_GRACE` (2 s) without a change, which only a
-  claimer that died mid-claim leaves. A race error inside the lock directory
-  (`ENOENT`, `EEXIST`, `ENOTEMPTY`) is retried at the next poll; any other error, or a
-  shared directory that cannot be used, plays uncoordinated. The cost: a crash in that gap delays the next
-  utterance by up to 2 s.
+  and handoff values overlap about 2 times in 900 utterances that way. So a directory
+  with no owner file is reclaimed only after `OWNERLESS_GRACE` (2 s) without a change,
+  which only a claimer that died mid-claim leaves. A race error inside the lock
+  directory (`ENOENT`, `EEXIST`, `ENOTEMPTY`) is retried at the next poll; any other
+  error, or a shared directory that cannot be used, plays uncoordinated. The cost: a
+  crash in that gap delays the next utterance by up to 2 s.
   Known limitation: two processes reclaiming the same dead holder's lock at once can
   both take it, the window the start lock's takeover also accepts.
 

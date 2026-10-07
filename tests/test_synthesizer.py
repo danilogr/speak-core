@@ -88,3 +88,27 @@ async def test_lists_the_speech_models_voices_and_nothing_on_failure():
 
     assert await synthesizer(models).list_voices() == ["John", "Aria"]
     assert await synthesizer(down).list_voices() == []
+
+
+async def test_a_200_that_is_not_a_wav_is_a_refusal_not_audio():
+    """An error page or JSON body on a 200 would otherwise be written out and played as
+    silence, and a voice-over file would be a file of JSON."""
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"error": "model not loaded"})
+
+    with pytest.raises(SynthesisFailed) as raised:
+        await synthesizer(handler).synthesize("hi", voice="John")
+    assert raised.value.kind == SynthesisFailed.REFUSED
+    assert "not a WAV" in str(raised.value)
+
+
+async def test_a_models_listing_that_is_not_an_object_lists_no_voices():
+    def array(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json=["magpie"])
+
+    def scalar(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json="ok")
+
+    assert await synthesizer(array).list_voices() == []
+    assert await synthesizer(scalar).list_voices() == []

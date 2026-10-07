@@ -5,7 +5,7 @@ from collections.abc import Callable
 import pytest
 
 from speak_core.engines.base import Utterance
-from speak_core.queue import Process, SpeechQueue
+from speak_core.queue import Process, SpeechQueue, UtteranceOutcome
 from speak_core.speaker import WAITING_DIRNAME, SpeakerLock
 
 
@@ -1264,3 +1264,58 @@ async def test_a_worker_cancelled_while_playing_reports_discarded(tmp_path):
     await asyncio.gather(worker, return_exceptions=True)
 
     assert [outcome.status for outcome in outcomes] == ["discarded"]
+
+
+async def test_a_player_that_raises_anything_fails_that_utterance_and_the_queue_plays_on(running):
+    """A NUL byte in the text makes the spawn raise ValueError, not OSError. That one
+    utterance fails; the worker lives on and plays the next, so a session is never left
+    silent by one bad sentence."""
+    spawner = Spawner()
+    attempts = 0
+
+    async def spawn(command: str, args: list[str]) -> FakeProcess:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise ValueError("embedded null byte")
+        return await spawner(command, args)
+
+    errors: list[BaseException] = []
+    outcomes: list[UtteranceOutcome] = []
+    queue, _ = running(spawn=spawn, on_error=errors.append, on_finish=outcomes.append)
+    queue.enqueue("bad\x00text", voice=None, rate=None)
+    queue.enqueue("good", voice=None, rate=None)
+
+    await asyncio.wait_for(queue.drain(), timeout=5)
+
+    assert [outcome.status for outcome in outcomes] == ["failed", "ok"]
+    assert spawner.calls == [("say", ["good"])]
+    assert [type(error) for error in errors] == [ValueError]
+
+
+class ReleaseFails:
+    """A speaker lock whose release raises after the sentence has been played."""
+
+    async def acquire(self, stopped: asyncio.Event) -> bool:
+        return True
+
+    def release(self) -> None:
+        raise OSError("lock directory vanished")
+
+
+async def test_a_release_that_fails_after_a_played_sentence_records_it_failed(running):
+    """The sentence was heard, but a speaker lock that cannot be released is a failure
+    of that utterance; it is recorded as one and the queue plays on."""
+    errors: list[BaseException] = []
+    outcomes: list[UtteranceOutcome] = []
+    queue, spawner = running(
+        speaker=ReleaseFails(), on_error=errors.append, on_finish=outcomes.append
+    )
+    queue.enqueue("one", voice=None, rate=None)
+    queue.enqueue("two", voice=None, rate=None)
+
+    await asyncio.wait_for(queue.drain(), timeout=5)
+
+    assert [outcome.status for outcome in outcomes] == ["failed", "failed"]
+    assert [call[1] for call in spawner.calls] == [["one"], ["two"]]
+    assert [type(error) for error in errors] == [OSError, OSError]

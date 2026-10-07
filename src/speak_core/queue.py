@@ -396,6 +396,7 @@ class SpeechQueue:
         or abandoned because the player would not start. Cleanup is itself an `await`, so
         a worker cancelled inside it can still leave the file behind - but the utterance
         leaves the count either way, or a dead queue would report work it will never do.
+        A failure of any kind but a cancellation fails this utterance and nothing else.
         """
         status = "ok"
         play_ms: int | None = None
@@ -428,6 +429,13 @@ class SpeechQueue:
             # the speakers or played: nobody heard it to the end.
             status = "discarded"
             raise
+        except Exception as error:
+            # Anything else the speaker lock or the player raises - a NUL byte in the
+            # text is a ValueError from the OS, not an OSError - costs this utterance
+            # alone. Left to propagate it would end the worker, and every sentence after
+            # it would be queued and never spoken.
+            self._on_error(error)
+            status = "failed"
         finally:
             try:
                 if prepared.utterance is not None:

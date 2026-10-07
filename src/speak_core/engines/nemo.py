@@ -41,6 +41,12 @@ def _wav_duration_ms(wav: bytes) -> int | None:
     return round(frames / rate * 1000) if rate > 0 else None
 
 
+def _is_wav(body: bytes) -> bool:
+    """Whether the body opens like a RIFF/WAVE file, which is all the player needs it to
+    be; a JSON or HTML error page sent with a 200 does not."""
+    return body[:4] == b"RIFF" and body[8:12] == b"WAVE"
+
+
 class SynthesisFailed(RuntimeError):  # noqa: N818 - reads as what happened, like TranscriptionFailed
     """The speech server could not be reached, did not answer in time, or refused."""
 
@@ -106,6 +112,12 @@ class NemoSynthesizer:
             raise SynthesisFailed(
                 f"could not reach the speech server: {error}", kind=SynthesisFailed.UNREACHABLE
             ) from error
+        if not _is_wav(response.content):
+            raise SynthesisFailed(
+                "the speech server answered with something that is not a WAV: "
+                f"{response.content[:80]!r}",
+                kind=SynthesisFailed.REFUSED,
+            )
         return response.content
 
     async def list_voices(self) -> list[str]:
@@ -114,10 +126,14 @@ class NemoSynthesizer:
                 f"{self._base_url}/v1/models", headers=self._headers, timeout=self._timeout
             )
             response.raise_for_status()
-            models = response.json().get("data", [])
+            body = response.json()
         except (httpx2.HTTPError, ValueError) as error:
             logger.warning("could not list speech server voices: %s", error)
             return []
+        if not isinstance(body, dict):
+            logger.warning("could not list speech server voices: the listing is not an object")
+            return []
+        models = body.get("data", [])
         for model in models:
             if model.get("capability") == "speech":
                 return list(model.get("voices", []))

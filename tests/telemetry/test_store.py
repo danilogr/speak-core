@@ -229,3 +229,24 @@ def test_a_whole_second_still_renders_six_fraction_digits(monkeypatch):
 
     monkeypatch.setattr(store, "datetime", WholeSecond)
     assert store.now_iso() == "2026-10-06T12:00:05.000000Z"
+
+
+def test_if_absent_on_a_table_with_a_seq_column_keeps_the_row_and_the_sequence() -> None:
+    """A repeated id is a no-op and does not consume a sequence number: the next new
+    row follows the last stored one."""
+    conn = store.connect(Path(":memory:"), UTTERANCES)
+    store.upsert_install(conn, INSTALL)
+    store.insert_session(conn, UTTERANCES, SESSION)
+
+    first = store.insert_row(conn, UTTERANCES.rows, utterance(utterance_id="u-1"), if_absent=True)
+    again = store.insert_row(
+        conn, UTTERANCES.rows, utterance(utterance_id="u-1", status="failed"), if_absent=True
+    )
+    second = store.insert_row(conn, UTTERANCES.rows, utterance(utterance_id="u-2"), if_absent=True)
+
+    assert (first, again, second) == (True, False, True)
+    rows = store.unshipped_rows(conn, UTTERANCES.rows)
+    assert [(row["utterance_id"], row["seq"], row["status"]) for row in rows] == [
+        ("u-1", 1, "ok"),
+        ("u-2", 2, "ok"),
+    ]

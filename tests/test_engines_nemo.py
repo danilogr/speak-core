@@ -194,3 +194,38 @@ async def test_a_fallback_utterance_reports_say_and_no_voice():
     engine = engine_over(handler, fallback=SayEngine(), default_voice="John")
     utterance = await engine.prepare("hello", voice="Sofia", rate=None)
     assert (utterance.engine, utterance.voice) == ("say", None)
+
+
+async def test_falls_back_to_say_when_the_server_times_out():
+    """A server that takes the request and never answers would otherwise hold the
+    sentence for the whole timeout and then lose it; it is spoken by `say` instead, and
+    the supervisor is told, like any other failure to reach the server."""
+    notified: list[bool] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        raise httpx2.ReadTimeout("slow", request=request)
+
+    engine = engine_over(
+        handler, fallback=SayEngine(), on_unavailable=lambda: notified.append(True)
+    )
+    utterance = await engine.prepare("hello", voice=None, rate=None)
+
+    assert (utterance.command, utterance.args) == ("say", ["hello"])
+    assert notified == [True]
+
+
+async def test_falls_back_to_say_when_the_server_answers_with_something_that_is_not_audio():
+    """A 200 carrying an error page or JSON is not a sound; handed to the player it
+    would be silence, so the sentence is spoken by `say` and the supervisor is told."""
+    notified: list[bool] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"error": "model not loaded"})
+
+    engine = engine_over(
+        handler, fallback=SayEngine(), on_unavailable=lambda: notified.append(True)
+    )
+    utterance = await engine.prepare("hello", voice=None, rate=None)
+
+    assert (utterance.command, utterance.args) == ("say", ["hello"])
+    assert notified == [True]

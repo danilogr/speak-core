@@ -216,6 +216,16 @@ def test_timestamps_are_utc_with_a_z():
 
     stamp = store.now_iso()
     assert stamp.endswith("Z")
-    assert re.fullmatch(
-        r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,6})?Z", stamp
-    )
+    assert re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z", stamp)
+
+
+def test_a_whole_second_still_renders_six_fraction_digits(monkeypatch):
+    from datetime import datetime, tzinfo
+
+    class WholeSecond(datetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> "WholeSecond":
+            return cls(2026, 10, 6, 12, 0, 5, 0, tzinfo=tz)
+
+    monkeypatch.setattr(store, "datetime", WholeSecond)
+    assert store.now_iso() == "2026-10-06T12:00:05.000000Z"

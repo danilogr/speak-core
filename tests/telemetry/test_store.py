@@ -159,6 +159,25 @@ def test_the_unshipped_backlog_is_capped_oldest_first() -> None:
     assert [row["utterance_id"] for row in rows] == ["utterance-2", "utterance-3", "utterance-4"]
 
 
+def test_the_backlog_cap_prunes_by_the_order_column_not_by_insertion() -> None:
+    """Rows recorded out of order (a worker's row landing after a later one) are still
+    pruned oldest by `order_column` first."""
+    conn = store.connect(Path(":memory:"), UTTERANCES)
+    store.upsert_install(conn, INSTALL)
+    store.insert_session(conn, UTTERANCES, SESSION)
+
+    for n in (3, 0, 4, 1, 2):
+        store.insert_row(
+            conn,
+            UTTERANCES.rows,
+            utterance(utterance_id=f"utterance-{n}", occurred_at=f"2026-09-13T10:00:0{n}Z"),
+            backlog_cap=3,
+        )
+
+    rows = store.unshipped_rows(conn, UTTERANCES.rows)
+    assert [row["utterance_id"] for row in rows] == ["utterance-2", "utterance-3", "utterance-4"]
+
+
 def test_updating_a_session_puts_it_back_in_the_backlog() -> None:
     """Every write to a session row clears `shipped_at`, or the server keeps the
     version it was first sent - a session with no end and the wrong harness."""

@@ -423,6 +423,11 @@ class SpeechQueue:
             finally:
                 if self._speaker is not None:
                     self._speaker.release()
+        except asyncio.CancelledError:
+            # The worker itself was cancelled (session teardown) while this waited for
+            # the speakers or played: nobody heard it to the end.
+            status = "discarded"
+            raise
         finally:
             try:
                 if prepared.utterance is not None:

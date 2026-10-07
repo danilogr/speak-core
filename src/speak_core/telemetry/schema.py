@@ -13,8 +13,17 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class RowTable:
     """The one table of rows a plugin ships. Its name is also the key its rows travel
-    under in the request body. Every row table has local `shipped_at` and
-    `rejected_at` columns, which is how the store tracks its backlog."""
+    under in the request body.
+
+    The store and the shipper rely on the table having:
+    - `session_id`, a foreign key to `sessions`: each row ships with its session;
+    - `install_id`: only the shipping install's rows go out;
+    - local `shipped_at` and `rejected_at` columns, which is how the store tracks its
+      backlog;
+    - SQLite's `rowid` (not `WITHOUT ROWID`): it breaks ties in `order_column`.
+
+    `store.insert_row` writes with a plain INSERT, neither OR REPLACE nor OR IGNORE:
+    with `id_column` as the table's key, a repeated id raises `sqlite3.IntegrityError`."""
 
     name: str
     id_column: str

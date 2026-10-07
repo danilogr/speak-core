@@ -36,6 +36,11 @@ The speech server is shared, so its settings have no plugin prefix:
 | `NEMO_TTS_SEED` | unset | pins a voice's timbre across restarts |
 | `SPEAK_CORE_STATE_DIR` | `<cache>/speak-core` | where plugins coordinate |
 
+Every plugin on a machine must be given the same values for these. Whichever plugin
+starts the server decides its arguments for all of them; plugins that disagree on
+`NEMO_HTTP_URL` start two servers, and plugins that disagree on `SPEAK_CORE_STATE_DIR`
+cannot see each other's sessions, so one can stop the server the other is using.
+
 A voice belongs to one plugin and is read under its prefix: `<PREFIX>_ENGINE`,
 `<PREFIX>_VOICE`, `<PREFIX>_VOICE_POOL`, `<PREFIX>_RATE`, `<PREFIX>_MAX_CHARS`,
 `<PREFIX>_COMMAND`. speak-core never reads the environment itself; plugins pass it.

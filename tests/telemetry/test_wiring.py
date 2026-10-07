@@ -114,7 +114,7 @@ def test_timezone_is_an_iana_name_the_contract_accepts_or_nothing(raw, expected)
     [("claude-code", "claude-code"), ("Codex", "codex"), ("something-else", "unknown")],
 )
 def test_detect_harness_takes_a_declared_harness_only_from_the_enum(declared, expected) -> None:
-    """`/talk` is no MCP session, so the host it runs under is passed in by name; a
+    """A standalone command is no MCP session, so the host it runs under is passed in by name; a
     value outside the contract's enum would have its session refused."""
     assert wiring.detect_harness({"SPEAK_HARNESS": declared}, IDENTITY) == (expected, None)
 

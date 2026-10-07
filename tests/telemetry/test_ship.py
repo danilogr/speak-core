@@ -522,7 +522,7 @@ async def test_only_the_current_install_ships_under_its_own_install_row() -> Non
 
 
 async def test_a_chunk_budgets_for_the_sessions_it_carries() -> None:
-    """A backlog of single-utterance sessions - one per `/talk` - puts a session
+    """A backlog of single-utterance sessions - one per standalone command - puts a session
     beside every row. Counting the rows alone would build a request over the
     server's body cap, which is answered `413` and never delivered."""
     conn = store.connect(Path(":memory:"), UTTERANCES)

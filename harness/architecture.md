@@ -41,7 +41,8 @@ tools and no commands, and it never reads the environment: plugins pass it a map
   failure inside the lock directory, where a usable shared directory proves it is
   another process's claim or release, is waited out.
 - **`supervisor.NemoSupervisor`** — starts, shares, and stops the local speech server.
-  It must not synthesize or play anything.
+  `warm(reachable)` is the start a caller that can ask the port first uses. It must not
+  synthesize or play anything.
 - **`player`** — resolves one command that plays a WAV, per platform, from the binaries
   actually present. Pure apart from the injected `which`, so the search is testable on
   any machine. Used by the `nemo` engine and by a plugin's own cues.
@@ -103,7 +104,8 @@ An utterance prepared ahead that never reaches playback is released by the worke
 
 The release point is also where each utterance's outcome is reported, exactly once:
 `ok`; `discarded` when nobody heard it (a stop before or during the spawn, or while it
-waited or was prepared); `interrupted` when a stop landed while it was audible, which
+waited or was prepared) or when the worker itself was cancelled while it waited for the
+speakers or played; `interrupted` when a stop landed while it was audible, which
 the generation re-checked after the player exits is what tells apart; and `failed`
 when synthesis failed, the player would not start, or it exited non-zero on its own.
 A player that a stop terminated exits non-zero too, so the generation is checked
@@ -370,10 +372,10 @@ plugin stores is its own.
 - **A running speech server is never replaced, and callers guard it twice.** A second
   server would overwrite `server.json` with a pid that cannot bind the port and orphan the
   first; the last process out would then stop the wrong pid and leave a gigabyte resident.
-  A caller that can ask first calls `reachable()` before `ensure_running()`. That check is
-  liveness, not readiness: any HTTP answer means the port is taken, including the 503 of a
-  server still warming up and a server with no ASR model, neither of which may be
-  replaced. `ensure_running` then refuses again when `server.json` names a live pid. That
+  A caller that can ask first calls `warm(reachable)`, which asks the port before
+  `ensure_running()`. That check is liveness, not readiness: any HTTP answer means the
+  port is taken, including the 503 of a server still warming up and a server with no ASR
+  model, neither of which may be replaced. `ensure_running` then refuses again when `server.json` names a live pid. That
   is the only guard for a caller that cannot make the first check, such as a TTS fallback
   that fires on any HTTP failure, a 5xx or a timeout from a loaded server included. The pid
   check is the weaker of the two, since it trusts `server.json` and a pid the OS has since

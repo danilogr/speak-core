@@ -1226,3 +1226,41 @@ async def test_the_speaker_is_released_when_playback_is_cancelled(tmp_path):
     assert not (tmp_path / "speaker").exists()
     other = speaker(tmp_path, 2)
     assert await asyncio.wait_for(other.acquire(asyncio.Event()), 1.0) is True
+
+
+async def test_a_worker_cancelled_while_waiting_for_the_speaker_reports_discarded(tmp_path):
+    """Review focus: session teardown cancels the worker; an utterance nobody heard
+    must not be reported as played."""
+    outcomes = []
+    held = speaker(tmp_path, 1)
+    assert await held.acquire(asyncio.Event())
+    spawner = Spawner(autofinish=False)
+    queue = SpeechQueue(
+        prepare=prepare_say, spawn=spawner, speaker=speaker(tmp_path, 2), on_finish=outcomes.append
+    )
+    worker = asyncio.create_task(queue.run())
+    queue.enqueue("one", voice=None, rate=None)
+    await until(lambda: (tmp_path / WAITING_DIRNAME / "2").exists())
+
+    worker.cancel()
+    await asyncio.gather(worker, return_exceptions=True)
+
+    assert [outcome.status for outcome in outcomes] == ["discarded"]
+    assert spawner.calls == []
+    held.release()
+
+
+async def test_a_worker_cancelled_while_playing_reports_discarded(tmp_path):
+    outcomes = []
+    spawner = Spawner(autofinish=False)
+    queue = SpeechQueue(
+        prepare=prepare_say, spawn=spawner, speaker=speaker(tmp_path, 1), on_finish=outcomes.append
+    )
+    worker = asyncio.create_task(queue.run())
+    queue.enqueue("one", voice=None, rate=None)
+    await until(lambda: len(spawner.calls) == 1)
+
+    worker.cancel()
+    await asyncio.gather(worker, return_exceptions=True)
+
+    assert [outcome.status for outcome in outcomes] == ["discarded"]

@@ -166,6 +166,21 @@ class NemoSupervisor:
         finally:
             shutil.rmtree(self._lock_dir, ignore_errors=True)
 
+    async def warm(self, reachable: Probe) -> bool:
+        """Start the server unless something already answers on its port.
+
+        Returns True only when this call spawned it. `ensure_running` never replaces a
+        server it holds a live record of, but one it has no record of - started by
+        hand, or under another state directory - is invisible to it: it would spawn a
+        second that cannot bind the port, record that pid over nothing useful, and the
+        last session out would stop the wrong process. `reachable` is liveness, not
+        readiness: any HTTP answer means the port is taken, so a server that is up but
+        lacks a model is not replaced either.
+        """
+        if await reachable():
+            return False
+        return await self.ensure_running()
+
     async def _start_once(self, args: list[str]) -> tuple[int, bool]:
         """Spawn the server, record it, and wait for it to answer.
 

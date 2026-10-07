@@ -112,6 +112,29 @@ async def test_a_server_that_is_already_running_is_not_replaced(tmp_path):
     assert json.loads((tmp_path / "server.json").read_text())["pid"] == 4242
 
 
+async def test_warm_leaves_a_server_it_has_no_record_of_alone(tmp_path):
+    """A server the user started themselves already holds the port: one spawned beside
+    it could not bind, and its pid would replace the record of the one answering."""
+    spawns = Spawns()
+
+    async def answering() -> bool:
+        return True
+
+    assert await build(tmp_path, spawn=spawns).warm(answering) is False
+    assert spawns.calls == []
+    assert not (tmp_path / "server.json").exists()
+
+
+async def test_warm_starts_the_server_when_nothing_answers(tmp_path):
+    spawns = Spawns()
+
+    async def silent() -> bool:
+        return False
+
+    assert await build(tmp_path, spawn=spawns).warm(silent) is True
+    assert len(spawns.calls) == 1
+
+
 async def test_a_server_another_session_is_starting_is_waited_for(tmp_path):
     """The caller's next move is to transcribe against it. Returning the moment the
     record exists hands back a server that has not bound its port, and the call site
@@ -268,9 +291,10 @@ async def test_the_configured_asr_model_is_served_alongside_speech(tmp_path):
 )
 async def test_release_survives_a_server_record_it_did_not_write(tmp_path, written):
     """`release` runs in a `finally` whose caller catches a fixed set of exceptions, so
-    anything else raised there reaches the user as a traceback - and on the /talk path
-    a traceback lands where the user's own words are read from. The file is on disk,
-    so its shape is not this code's to assume: it parsed, which is not the same thing."""
+    anything else raised there reaches the user as a traceback - and in a standalone
+    dictation process a traceback lands where the user's own words are read from. The
+    file is on disk, so its shape is not this code's to assume: it parsed, which is not
+    the same thing."""
     (tmp_path / "server.json").write_text(written)
     supervisor = build(tmp_path)
     await supervisor.register()

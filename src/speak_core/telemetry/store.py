@@ -198,8 +198,9 @@ def insert_row(
     row: dict[str, Any],
     *,
     backlog_cap: int = DEFAULT_BACKLOG_CAP,
-) -> None:
-    """Insert one row and enforce the unshipped-backlog cap.
+    if_absent: bool = False,
+) -> bool:
+    """Insert one row and enforce the unshipped-backlog cap. True when a row was stored.
 
     A table with a `seq_column` has it assigned here and nowhere else, inside the
     INSERT itself, as one more than the session's highest so far: a worker process
@@ -207,8 +208,11 @@ def insert_row(
     collide with the other's rows, and one statement under SQLite's single write lock
     cannot. Any value the caller passes for it is ignored.
 
-    A missing `session_id` (or one that names no session) is refused by the foreign
-    key, exactly as D1 refuses it in production.
+    `if_absent` makes a row whose id is already stored a no-op rather than an error,
+    for tables whose id is the contract's idempotency key and that more than one
+    process may record (a crashed job). Only the id conflict is ignored: a missing
+    `session_id` (or one that names no session) is still refused by the foreign key,
+    exactly as D1 refuses it in production.
     """
     seq = table.seq_column
     present = [c for c in table.columns if c in row and c != seq]
@@ -221,9 +225,13 @@ def insert_row(
             f"(SELECT COALESCE(MAX({seq}), 0) + 1 FROM {table.name} "
             "WHERE session_id = :session_id))"
         )
-    conn.execute(sql, row)
+    if if_absent:
+        sql += f" ON CONFLICT({table.id_column}) DO NOTHING"
+    stored = conn.execute(sql, row).rowcount > 0
     conn.commit()
-    _enforce_backlog_cap(conn, table, backlog_cap)
+    if stored:
+        _enforce_backlog_cap(conn, table, backlog_cap)
+    return stored
 
 
 def _enforce_backlog_cap(conn: sqlite3.Connection, table: RowTable, cap: int) -> None:

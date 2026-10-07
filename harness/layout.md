@@ -81,6 +81,7 @@
 | [`consent.py`](../src/speak_core/telemetry/consent.py) | Consent state: the mode switches, the persisted install id, and where they are stored. |
 | [`cli.py`](../src/speak_core/telemetry/cli.py) | The consent command: `on`, `local`, `off`, `--id`, `record on|off`, and status. |
 | [`report.py`](../src/speak_core/telemetry/report.py) | Stats scaffolding: finds the store, renders it with the plugin's function, prints install id and mode. |
+| [`notice.py`](../src/speak_core/telemetry/notice.py) | Whether the first-run notice is owed, and recording that it was shown (`notice.json`). |
 | [`machine.py`](../src/speak_core/telemetry/machine.py) | System probe: detects OS, CPU core counts, bucketed RAM (e.g. 16, 32 GB), and GPU acceleration. |
 
 ---
@@ -124,3 +125,4 @@ Offline tests executed with `uv run pytest`:
 | [`test_wiring.py`](../tests/telemetry/test_wiring.py) | Harness and locale detection and the install row. |
 | [`test_cli.py`](../tests/telemetry/test_cli.py) | The consent command's modes, `--id`, status and `record`. |
 | [`test_report.py`](../tests/telemetry/test_report.py) | The stats scaffolding: store lookup, rendering, install id and mode. |
+| [`test_notice.py`](../tests/telemetry/test_notice.py) | The first-run notice: owed once per disclosure version, never under DO_NOT_TRACK. |

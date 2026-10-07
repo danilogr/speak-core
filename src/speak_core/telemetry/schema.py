@@ -22,8 +22,9 @@ class RowTable:
       backlog;
     - SQLite's `rowid` (not `WITHOUT ROWID`): it breaks ties in `order_column`.
 
-    `store.insert_row` writes with a plain INSERT, neither OR REPLACE nor OR IGNORE:
-    with `id_column` as the table's key, a repeated id raises `sqlite3.IntegrityError`."""
+    `store.insert_row` writes with a plain INSERT, never OR REPLACE: with `id_column` as
+    the table's key, a repeated id raises `sqlite3.IntegrityError`, unless the caller
+    passes `if_absent=True`, which turns that one conflict into a no-op."""
 
     name: str
     id_column: str

@@ -117,3 +117,43 @@ def test_the_backlog_cap_drops_the_oldest_jobs():
         backlog_cap=2,
     )
     assert [row["job_id"] for row in store.unshipped_rows(conn, JOBS.rows)] == ["mid", "new"]
+
+
+def test_if_absent_keeps_the_row_already_stored():
+    """Two processes can each decide a dead worker's job crashed; the job id is the
+    contract's idempotency key, so the second record must be a no-op, not an error."""
+    conn = seeded([job(job_id="j1", status="crashed")])
+
+    stored = store.insert_row(conn, JOBS.rows, job(job_id="j1", status="ok"), if_absent=True)
+
+    assert stored is False
+    (row,) = store.unshipped_rows(conn, JOBS.rows)
+    assert row["status"] == "crashed"
+
+
+def test_if_absent_still_stores_a_new_row():
+    conn = seeded([])
+    assert store.insert_row(conn, JOBS.rows, job(job_id="j2"), if_absent=True) is True
+    assert [r["job_id"] for r in store.unshipped_rows(conn, JOBS.rows)] == ["j2"]
+
+
+def test_a_duplicate_without_if_absent_still_raises():
+    import sqlite3
+
+    import pytest
+
+    conn = seeded([job(job_id="j1")])
+    with pytest.raises(sqlite3.IntegrityError):
+        store.insert_row(conn, JOBS.rows, job(job_id="j1"))
+
+
+def test_if_absent_does_not_hide_an_orphaned_row():
+    """Only the id conflict is ignored: a row whose session does not exist is refused
+    locally exactly as D1 refuses it in production."""
+    import sqlite3
+
+    import pytest
+
+    conn = seeded([])
+    with pytest.raises(sqlite3.IntegrityError):
+        store.insert_row(conn, JOBS.rows, job(job_id="j3", session_id="nobody"), if_absent=True)

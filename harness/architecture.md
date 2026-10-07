@@ -169,7 +169,9 @@ plugin stores is its own.
   session that shipped when it began ships again with its `ended_at`. `seq` is
   assigned inside the INSERT, from the session's highest so far: two processes can
   write to the same session, and only a statement under SQLite's single write lock
-  cannot hand both the same number. `PRAGMA foreign_keys = ON` is set on every
+  cannot hand both the same number. A row table whose id is an idempotency key that
+  several processes may record (a crashed job) inserts with `if_absent`, which ignores
+  the id conflict and nothing else. `PRAGMA foreign_keys = ON` is set on every
   connection this module opens, matching D1's unconditional enforcement in production.
 - **`wiring.py`** — composition every plugin shares: the HTTP transport, harness and
   locale detection, and `start_install`, which loads consent, refreshes the machine
@@ -188,6 +190,10 @@ plugin stores is its own.
   request itself (`send`) is for the plugin to run as a background task.
 - **`report.py`** — the scaffolding behind a plugin's `<plugin>-stats`: finds the
   store, renders it with the plugin's own function, prints install id and mode.
+- **`notice.py`** — the first-run notice a plugin owes before it sends anything: `due` and
+  `mark_shown`, keyed on the plugin's disclosure version in `notice.json` beside the
+  consent file. The text and where it is shown are the plugin's. A separate file, because
+  the install ping reads the consent file's existence to tell an install from an upgrade.
 
 ## External dependencies
 

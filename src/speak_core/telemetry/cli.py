@@ -42,8 +42,10 @@ def run(
         line = f"{identity.plugin} telemetry: {mode}"
         if current is not None and current.record:
             line += ", keeping recordings"
-        if consent.forced_off(env, identity):
-            line += f" (overridden to off here by {identity.mode_env} or DO_NOT_TRACK)"
+        saved = current.mode if current is not None else consent.DEFAULT_MODE
+        effective = consent.effective_mode(saved, env, identity)
+        if effective != saved:
+            line += f" (lowered to {effective} here by {identity.mode_env} or DO_NOT_TRACK)"
         out.write(line + "\n")
         return 0
 

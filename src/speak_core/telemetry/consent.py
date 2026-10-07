@@ -3,9 +3,9 @@
 Consent lives in the OS's per-user config directory, never a cache directory - one
 the OS may clear would silently re-enable telemetry someone had switched off.
 
-Like `settings.Settings`, this module takes the environment as a plain mapping rather
-than reading `os.environ` itself, so it stays testable without patching globals; the
-plugin reads the real environment and passes it in.
+This module takes the environment as a plain mapping rather than reading `os.environ`
+itself, so it stays testable without patching globals; the plugin reads the real
+environment and passes it in.
 """
 
 import json
@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 MODE_OFF = "off"
 MODE_LOCAL = "local"
 MODE_ON = "on"
+# Ordered from least to most shared: the environment may move a run left, never right.
 MODES = (MODE_OFF, MODE_LOCAL, MODE_ON)
 
 # Opt-out: a new install collects and transmits. Anonymous counts and timings
@@ -132,21 +133,31 @@ def consent_path(
 
 
 def forced_off(env: Mapping[str, str], identity: TelemetryIdentity) -> bool:
-    """`<PREFIX>_TELEMETRY=off` and `DO_NOT_TRACK=1` force collection off for this run.
+    """`<PREFIX>_TELEMETRY=off` and `DO_NOT_TRACK=1` force collection off for this run."""
+    return effective_mode(MODE_ON, env, identity) == MODE_OFF
 
-    Neither can turn telemetry *on* over a config file that says otherwise - an
-    environment variable leaking into a shared runner must not be able to enable
-    collection nobody configured on that machine.
+
+def effective_mode(saved: str, env: Mapping[str, str], identity: TelemetryIdentity) -> str:
+    """The mode this run uses: the saved one, lowered by `<PREFIX>_TELEMETRY`
+    (`off`, `local` or `on`) or by `DO_NOT_TRACK`.
+
+    The environment never raises the saved mode - an environment variable leaking
+    into a shared runner must not be able to enable collection nobody configured on
+    that machine, and an explicit `off` from the consent command always wins.
     """
-    if (env.get(identity.mode_env) or "").strip().lower() == MODE_OFF:
-        return True
-    return do_not_track(env)
+    if do_not_track(env):
+        return MODE_OFF
+    requested = (env.get(identity.mode_env) or "").strip().lower()
+    if requested not in MODES:
+        return saved
+    return min(saved, requested, key=MODES.index)
 
 
 def load_consent(
     env: Mapping[str, str], identity: TelemetryIdentity, *, host_platform: str
 ) -> Consent:
-    """The effective consent for this process.
+    """The effective consent for this process: the saved consent with its mode
+    lowered as `effective_mode` says.
 
     A forced-off environment skips the filesystem entirely: it must not create a
     config file, let alone an install id, for a machine that just said no.
@@ -161,7 +172,7 @@ def load_consent(
     if consent is None:
         consent = Consent(install_id=str(uuid.uuid4()), disclosure_ver=identity.disclosure_version)
         store.save(consent)
-    return consent
+    return replace(consent, mode=effective_mode(consent.mode, env, identity))
 
 
 def save_machine(
@@ -173,11 +184,16 @@ def save_machine(
     facts: MachineFacts,
     plugin_version: str,
 ) -> Consent:
-    """Persist a freshly probed (or reused) machine snapshot alongside the switches."""
+    """Persist a freshly probed (or reused) machine snapshot alongside the switches.
+
+    The file keeps the mode it holds: `consent.mode` may be lowered for this run only.
+    """
     updated = replace(consent, machine=facts, machine_plugin_version=plugin_version)
     if consent.mode != MODE_OFF:
-        ConsentStore(
+        store = ConsentStore(
             consent_path(env, identity, host_platform=host_platform),
             disclosure_version=identity.disclosure_version,
-        ).save(updated)
+        )
+        saved = store.load()
+        store.save(updated if saved is None else replace(updated, mode=saved.mode))
     return updated

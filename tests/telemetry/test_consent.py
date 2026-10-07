@@ -80,6 +80,54 @@ def test_an_environment_override_cannot_turn_telemetry_on_over_a_config_file(tmp
     assert loaded.mode == "off"
 
 
+def saved_mode(env, mode) -> None:
+    consent.ConsentStore(
+        IDENTITY.config_dir(env, host_platform="linux") / consent.CONFIG_FILENAME,
+        disclosure_version=2,
+    ).save(consent.Consent(install_id="fixed-id", disclosure_ver=2, mode=mode))
+
+
+def test_speak_telemetry_local_lowers_a_saved_on_for_this_run(tmp_path) -> None:
+    env = {"HOME": str(tmp_path)}
+    saved_mode(env, "on")
+    loaded = consent.load_consent(
+        {**env, "SPEAK_TELEMETRY": "local"}, IDENTITY, host_platform="linux"
+    )
+    assert loaded.mode == "local"
+    assert loaded.collects is True
+    assert loaded.uploads is False
+
+
+def test_speak_telemetry_local_cannot_raise_a_saved_off(tmp_path) -> None:
+    """An explicit opt-out from the consent command always wins."""
+    env = {"HOME": str(tmp_path)}
+    saved_mode(env, "off")
+    loaded = consent.load_consent(
+        {**env, "SPEAK_TELEMETRY": "local"}, IDENTITY, host_platform="linux"
+    )
+    assert loaded.mode == "off"
+
+
+def test_an_unknown_speak_telemetry_value_leaves_the_saved_mode(tmp_path) -> None:
+    env = {"HOME": str(tmp_path)}
+    saved_mode(env, "local")
+    loaded = consent.load_consent(
+        {**env, "SPEAK_TELEMETRY": "yes"}, IDENTITY, host_platform="linux"
+    )
+    assert loaded.mode == "local"
+
+
+def test_a_mode_lowered_by_the_environment_is_never_saved(tmp_path) -> None:
+    env = {"HOME": str(tmp_path)}
+    lowered = {**env, "SPEAK_TELEMETRY": "local"}
+    consented = consent.load_consent(lowered, IDENTITY, host_platform="linux")
+    updated = consent.save_machine(
+        lowered, IDENTITY, consented, host_platform="linux", facts=FACTS, plugin_version="1.1.0"
+    )
+    assert updated.mode == "local"
+    assert consent.load_consent(env, IDENTITY, host_platform="linux").mode == "on"
+
+
 def test_a_corrupt_config_file_degrades_to_starting_over(tmp_path) -> None:
     env = {"HOME": str(tmp_path)}
     path = IDENTITY.config_dir(env, host_platform="linux") / consent.CONFIG_FILENAME

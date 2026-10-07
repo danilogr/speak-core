@@ -147,7 +147,8 @@ plugin stores is its own.
 - **`consent.py`** — the switches and the persisted install id, read from a config
   file under the OS's per-user config directory, never a cache directory. A cache
   directory the OS may clear must not be the thing that silently re-enables
-  telemetry someone switched off.
+  telemetry someone switched off. `<PREFIX>_TELEMETRY` (`off`, `local` or `on`) and
+  `DO_NOT_TRACK` lower the saved mode for one run and are never written to the file.
 - **`cli.py`** — the consent command a plugin registers as `<plugin>-telemetry`:
   `on|local|off`, `--id`, status with no argument, and `record on|off` when the plugin
   keeps recordings.
@@ -345,6 +346,13 @@ plugin stores is its own.
   checkout cannot work, and `uv sync` installs a git dependency natively. A plugin moves
   to a new core only by bumping its pin. Rejected: git submodules, which plugin installs
   do not document.
+
+- **The environment lowers the telemetry mode, never raises it.** `<PREFIX>_TELEMETRY`
+  may be `off`, `local` or `on`, and the run uses whichever of it and the mode saved by
+  the consent command shares less. An explicit `off` from the command therefore always
+  wins, and a variable leaking into a shared runner cannot enable collection nobody
+  configured on that machine. The cost: no environment variable can override a saved
+  `off`; the consent command is the way back.
 
 - **Telemetry is one mechanism with a contract per plugin.** Identity and schema are
   inputs, so each plugin keeps its own database, consent, install id, endpoint and

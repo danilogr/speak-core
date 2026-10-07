@@ -75,7 +75,19 @@ def test_status_reports_the_saved_mode(tmp_path):
 def test_status_says_when_the_environment_overrides_the_saved_mode(tmp_path):
     run(tmp_path, "on")
     _, out, _ = run(tmp_path, env={"HOME": str(tmp_path), "DO_NOT_TRACK": "1"})
-    assert "overridden to off" in out
+    assert "lowered to off" in out
+
+
+def test_status_says_when_the_environment_lowers_the_saved_mode(tmp_path):
+    run(tmp_path, "on")
+    _, out, _ = run(tmp_path, env={"HOME": str(tmp_path), "SPEAK_TELEMETRY": "local"})
+    assert "speak telemetry: on (lowered to local here" in out
+
+
+def test_status_says_nothing_when_the_environment_cannot_raise_the_saved_mode(tmp_path):
+    run(tmp_path, "local")
+    _, out, _ = run(tmp_path, env={"HOME": str(tmp_path), "SPEAK_TELEMETRY": "on"})
+    assert out == "speak telemetry: local\n"
 
 
 def test_record_is_refused_unless_the_plugin_allows_it(tmp_path):

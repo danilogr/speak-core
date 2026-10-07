@@ -1,13 +1,14 @@
 """The install ping: when it is due, what it says, and that the marker moves only on
 success. Every transport is injected - no test here opens a socket."""
 
+import io
 import json
 from pathlib import Path
 
 import pytest
 from telemetry_fixtures import IDENTITY
 
-from speak_core.telemetry import consent, ping
+from speak_core.telemetry import cli, consent, ping
 from speak_core.telemetry.ship import TransportResponse
 
 INGEST = "https://telemetry.example/v1/ingest"
@@ -69,12 +70,28 @@ def test_the_ping_carries_exactly_the_contracts_three_fields(tmp_path):
     assert set(pending.payload) == {"plugin_version", "os", "event"}
 
 
-def test_an_install_that_predates_the_ping_reports_an_upgrade(tmp_path):
-    """No marker, but a consent file: this machine ran an earlier version."""
+def test_a_mode_saved_before_the_first_run_still_pings_install(tmp_path):
+    """`<plugin>-telemetry off` run before the plugin ever ran creates the consent file.
+    That is a choice, not an earlier install: this machine has never been counted."""
+    code = cli.run(
+        IDENTITY,
+        ["off"],
+        env(tmp_path),
+        host_platform="linux",
+        allow_record=False,
+        out=io.StringIO(),
+        err=io.StringIO(),
+    )
+    assert code == 0
+    pending = due(tmp_path)
+    assert pending is not None and pending.payload["event"] == "install"
+
+
+def test_a_consent_file_without_a_ping_record_is_still_an_install(tmp_path):
     config_dir(tmp_path).mkdir(parents=True)
     (config_dir(tmp_path) / consent.CONFIG_FILENAME).write_text("{}")
     pending = due(tmp_path)
-    assert pending is not None and pending.payload["event"] == "upgrade"
+    assert pending is not None and pending.payload["event"] == "install"
 
 
 def test_a_new_version_reports_an_upgrade(tmp_path):

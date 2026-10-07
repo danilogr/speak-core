@@ -112,7 +112,8 @@ The release point is also where each utterance's outcome is reported, exactly on
 waited or was prepared) or when the worker itself was cancelled while it waited for the
 speakers or played; `interrupted` when a stop landed while it was audible, which
 the generation re-checked after the player exits is what tells apart; and `failed`
-when synthesis failed, the player would not start, or it exited non-zero on its own.
+when synthesis failed, the speaker lock could not be claimed or released, the player
+would not start, or it exited non-zero on its own.
 A player that a stop terminated exits non-zero too, so the generation is checked
 before the exit code.
 
@@ -193,14 +194,15 @@ plugin stores is its own.
   that accepted fewer rows than were sent ships the chunk and ends the run. Rows are
   set aside with `rejected_at`; sessions refused on their own are marked sent.
 - **`ping.py`** — the anonymous install ping (see the decision below). Whether one is
-  due is a file read, made before anything creates the consent file it consults; the
-  request itself (`send`) is for the plugin to run as a background task.
+  due is a read of `ping.json` alone; the request itself (`send`) is for the plugin to run
+  as a background task.
 - **`report.py`** — the scaffolding behind a plugin's `<plugin>-stats`: finds the
   store, renders it with the plugin's own function, prints install id and mode.
 - **`notice.py`** — the first-run notice a plugin owes before it sends anything: `due` and
   `mark_shown`, keyed on the plugin's disclosure version in `notice.json` beside the
   consent file. The text and where it is shown are the plugin's. A separate file, because
-  the install ping reads the consent file's existence to tell an install from an upgrade.
+  showing the notice records no telemetry choice and must not create the consent file or
+  its install id. Under `DO_NOT_TRACK` it neither is owed nor writes anything.
 
 ## External dependencies
 
@@ -227,13 +229,15 @@ plugin stores is its own.
   `off` and `local` sent nothing, an install that opts out would be invisible, and the
   number of installs could not be known at all. The ping is `plugin_version`, `os` and
   `install`/`upgrade`, once per install and once per version, recorded locally in
-  `ping.json` only after the server answers `2xx`. It is identical in every mode, so it
-  never reveals that someone opted out, and it has no identifier, so it cannot be
-  joined to an install's other data or to another ping. `DO_NOT_TRACK` is the one
-  switch that means nothing is sent, and under it the ping module does not run at all:
-  no request and no file. Rejected: an install id on the ping, which would make it a tracking beacon for
-  people who said no; and keying install-versus-upgrade on anything but files already
-  in the config directory, which would need a second identity to persist.
+  `ping.json` only after the server answers `2xx`; it is an `install` exactly when
+  `ping.json` names no version, so a mode saved before the first run does not hide an
+  install. It is identical in every mode, so it never reveals that someone opted out, and
+  it has no identifier, so it cannot be joined to an install's other data or to another
+  ping. `DO_NOT_TRACK` is the one switch that means nothing is sent, and under it the
+  ping module does not run at all: no request and no file. Rejected: an install id on
+  the ping, which would make it a tracking beacon for people who said no; and keying
+  install-versus-upgrade on anything but `ping.json`, which would need a second identity
+  to persist.
 
 - **Sessions ship on their own, and a refused chunk is set aside.** A session row is
   written when the session starts and changes when it ends or learns its harness, long

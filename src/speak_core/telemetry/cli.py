@@ -3,9 +3,6 @@
 `on`, `local` and `off` persist the mode; `--id` prints the install id; with no
 argument it reports the saved mode. `record on|off` exists only for a plugin that
 keeps recordings. Output goes to the streams the caller passes.
-
-Saving a mode before the plugin has ever run creates the consent file, so that
-install's first ping reports an upgrade rather than an install.
 """
 
 import uuid

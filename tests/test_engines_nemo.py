@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import httpx2
+import pytest
 
 from speak_core.engines.nemo import NemoEngine
 from speak_core.engines.say import SayEngine
@@ -229,3 +230,27 @@ async def test_falls_back_to_say_when_the_server_answers_with_something_that_is_
 
     assert (utterance.command, utterance.args) == ("say", ["hello"])
     assert notified == [True]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"data": None},
+        {"data": "models"},
+        {"data": ["whisper", 3, None]},
+        {"data": [{"capability": "speech", "voices": None}]},
+        {"data": [{"capability": "speech", "voices": 7}]},
+    ],
+)
+async def test_lists_no_voices_when_the_listing_has_an_unexpected_shape(body):
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json=body)
+
+    assert await engine_over(handler).list_voices() == []
+
+
+async def test_skips_entries_that_are_not_objects_when_listing_voices():
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, json={"data": ["junk", *MODELS["data"]]})
+
+    assert await engine_over(handler).list_voices() == ["John", "Sofia", "Aria"]

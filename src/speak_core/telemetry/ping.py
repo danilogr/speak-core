@@ -10,9 +10,8 @@ Whether one is due is decided from `ping.json` in the config directory, which ho
 only the last version pinged. That file is written only after the server answers
 `2xx`, so a ping that fails is simply due again next session; there is no other retry.
 
-Deciding is a file read, done synchronously before anything else touches the config
-directory; sending is a background task that never delays speech or a transcript.
-Takes an injected transport, so no test here opens a socket.
+Deciding is one file read; sending is a background task that never delays speech or a
+transcript. Takes an injected transport, so no test here opens a socket.
 """
 
 import json
@@ -64,12 +63,7 @@ def due(
     host_platform: str,
     ingest_url: str,
 ) -> Ping | None:
-    """The ping this process owes, or `None`.
-
-    Has to run before the consent file can be created for the first time: with no
-    marker, an existing `telemetry.json` is what tells an upgrade from an install
-    that predates the ping from a new one.
-    """
+    """The ping this process owes, or `None`."""
     if consent.do_not_track(env):
         return None
     if host_platform not in CONTRACT_OS:
@@ -80,10 +74,10 @@ def due(
     last = _last_pinged(marker)
     if last == plugin_version:
         return None
-    if last is None and not (directory / consent.CONFIG_FILENAME).exists():
-        event = "install"
-    else:
-        event = "upgrade"
+    # A machine with no version counted has never been counted at all, whatever else
+    # its config directory holds: a mode saved before the first run is a choice, not an
+    # earlier install.
+    event = "install" if last is None else "upgrade"
     return Ping(
         payload={"plugin_version": plugin_version, "os": host_platform, "event": event},
         url=ping_url(ingest_url),

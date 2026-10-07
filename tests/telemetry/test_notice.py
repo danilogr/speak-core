@@ -52,8 +52,8 @@ def test_a_corrupt_marker_means_the_notice_is_owed(tmp_path):
 
 
 def test_marking_does_not_create_the_consent_file(tmp_path):
-    """The install ping tells an install from an upgrade by whether the consent file
-    exists, so showing the notice must not create it."""
+    """Showing the notice records no telemetry choice, so it must not create the
+    consent file (and with it an install id)."""
     env = env_at(tmp_path)
     notice.mark_shown(env, IDENTITY, host_platform="linux")
     directory = IDENTITY.config_dir(env, host_platform="linux")
@@ -66,3 +66,27 @@ def test_an_unwritable_config_directory_is_reported_not_raised(tmp_path):
     directory.parent.mkdir(parents=True)
     directory.write_text("a file where the directory should be")
     assert notice.mark_shown(env, IDENTITY, host_platform="linux") is False
+
+
+def test_a_boolean_in_the_marker_is_not_a_disclosure_version(tmp_path):
+    """JSON `true` is a Python `int` subclass; it must not read as disclosure 1."""
+    first = replace(IDENTITY, disclosure_version=1)
+    env = env_at(tmp_path)
+    marker = first.config_dir(env, host_platform="linux") / notice.NOTICE_FILENAME
+    marker.parent.mkdir(parents=True)
+    marker.write_text(json.dumps({"disclosure_ver": True}))
+    assert notice.due(env, first, host_platform="linux") is True
+
+
+def test_marking_under_do_not_track_writes_nothing(tmp_path):
+    env = env_at(tmp_path, DO_NOT_TRACK="1")
+    assert notice.mark_shown(env, IDENTITY, host_platform="linux") is False
+    assert not IDENTITY.config_dir(env, host_platform="linux").exists()
+
+
+def test_the_marker_is_replaced_whole_and_leaves_nothing_beside_it(tmp_path):
+    env = env_at(tmp_path)
+    assert notice.mark_shown(env, IDENTITY, host_platform="linux") is True
+    assert notice.mark_shown(env, IDENTITY, host_platform="linux") is True
+    directory = IDENTITY.config_dir(env, host_platform="linux")
+    assert sorted(p.name for p in directory.iterdir()) == [notice.NOTICE_FILENAME]

@@ -134,9 +134,13 @@ class NemoSynthesizer:
             logger.warning("could not list speech server voices: the listing is not an object")
             return []
         models = body.get("data", [])
+        if not isinstance(models, list):
+            logger.warning("could not list speech server voices: the models are not a list")
+            return []
         for model in models:
-            if model.get("capability") == "speech":
-                return list(model.get("voices", []))
+            if isinstance(model, dict) and model.get("capability") == "speech":
+                voices = model.get("voices", [])
+                return list(voices) if isinstance(voices, list) else []
         return []
 
 

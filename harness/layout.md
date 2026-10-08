@@ -53,8 +53,8 @@
 | [`exclusive.py`](../src/speak_core/exclusive.py) | Cross-process lock using filesystem directories, with automatic cleanup if a process exits unexpectedly. |
 | [`speaker.py`](../src/speak_core/speaker.py) | Cross-process speaker lock: one utterance plays at a time across every process that speaks, with turns that alternate. |
 | [`supervisor.py`](../src/speak_core/supervisor.py) | Speech server supervisor: starts, shares, and shuts down the local NeMo speech server across open terminal windows. |
-| [`install-nemo.sh`](../src/speak_core/install-nemo.sh) | NeMo installer run by `speak-core-setup`: installs `nemo-speech` >= 0.2.0, pulls MagpieTTS and Nemotron 3.5, runs `doctor`. Idempotent. |
-| [`setup.py`](../src/speak_core/setup.py) | The `speak-core-setup` console script. |
+| [`install-nemo.sh`](../src/speak_core/install-nemo.sh) | NeMo installer run by `speak-core-setup`: installs `nemo-speech` >= 0.2.0, pulls MagpieTTS and Nemotron 3.5, downloads the release's text-normalization grammars into `NEMO_TN_DIR`, runs `doctor`. Idempotent. |
+| [`setup.py`](../src/speak_core/setup.py) | The `speak-core-setup` console script: runs the installer with `NEMO_TN_DIR` set. |
 
 ### Speech Engines (`src/speak_core/engines/`)
 

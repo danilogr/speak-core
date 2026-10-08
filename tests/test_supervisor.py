@@ -284,6 +284,42 @@ async def test_the_configured_asr_model_is_served_alongside_speech(tmp_path):
     assert "--tts-model" in args
 
 
+def grammars(directory):
+    """A text-normalization grammar directory as the server reads one."""
+    for name in ("tokenize_and_classify.far", "verbalize.far"):
+        (directory / "en").mkdir(parents=True, exist_ok=True)
+        (directory / "en" / name).write_bytes(b"far")
+    return directory
+
+
+async def test_installed_grammars_turn_text_normalization_on(tmp_path):
+    spawns = Spawns()
+    tn_dir = grammars(tmp_path / "tn")
+    await build(tmp_path, spawn=spawns, tn_dir=tn_dir).ensure_running()
+    _binary, args = spawns.calls[0]
+    assert args[args.index("--tn-model-dir") + 1] == str(tn_dir)
+
+
+@pytest.mark.parametrize("files", [(), ("verbalize.far",), ("tokenize_and_classify.far",)])
+async def test_missing_grammars_leave_text_normalization_off(tmp_path, files):
+    """The server refuses to start on a grammar directory it cannot read."""
+    tn_dir = tmp_path / "tn"
+    (tn_dir / "en").mkdir(parents=True)
+    for name in files:
+        (tn_dir / "en" / name).write_bytes(b"far")
+    spawns = Spawns()
+    await build(tmp_path, spawn=spawns, tn_dir=tn_dir).ensure_running()
+    _binary, args = spawns.calls[0]
+    assert "--tn-model-dir" not in args
+
+
+async def test_no_grammar_directory_leaves_text_normalization_off(tmp_path):
+    spawns = Spawns()
+    await build(tmp_path, spawn=spawns).ensure_running()
+    _binary, args = spawns.calls[0]
+    assert "--tn-model-dir" not in args
+
+
 @pytest.mark.parametrize(
     "written",
     ['{"port": 8082}', "[1, 2]", '"8082"', "null", '{"pid": "4242"}'],
@@ -367,6 +403,65 @@ async def test_a_server_that_will_not_start_with_asr_is_retried_without_it(tmp_p
     assert "--asr-model" in first
     assert "--asr-model" not in second
     assert "--tts-model" in second, "speech must survive the fallback"
+
+
+async def test_a_server_that_will_not_start_with_grammars_is_retried_without_them(tmp_path):
+    """Grammars that will not load must cost text normalization, never speech or
+    listening."""
+    spawns = Spawns()
+    supervisor = build(
+        tmp_path,
+        spawn=spawns,
+        probe=FlakyProbe(),
+        asr_model="nemotron-3.5",
+        tn_dir=grammars(tmp_path / "tn"),
+        is_alive=lambda pid: False,
+    )
+
+    assert await supervisor.ensure_running() is True
+
+    first, second = (args for _, args in spawns.calls)
+    assert "--tn-model-dir" in first
+    assert "--tn-model-dir" not in second
+    assert "--asr-model" in second, "listening must survive dropping the grammars"
+
+
+async def test_a_server_that_still_will_not_start_is_retried_with_speech_alone(tmp_path):
+    spawns = Spawns()
+    supervisor = build(
+        tmp_path,
+        spawn=spawns,
+        probe=FlakyProbe(succeed_from=3),
+        asr_model="nemotron-3.5",
+        tn_dir=grammars(tmp_path / "tn"),
+        is_alive=lambda pid: False,
+    )
+
+    assert await supervisor.ensure_running() is True
+
+    assert len(spawns.calls) == 3
+    last = spawns.calls[-1][1]
+    assert "--tn-model-dir" not in last
+    assert "--asr-model" not in last
+    assert "--tts-model" in last
+
+
+async def test_grammars_that_failed_once_are_not_tried_again(tmp_path):
+    """Each failed attempt costs a full probe wait, so a restart skips what failed."""
+    spawns = Spawns()
+    supervisor = build(
+        tmp_path,
+        spawn=spawns,
+        probe=FlakyProbe(),
+        tn_dir=grammars(tmp_path / "tn"),
+        is_alive=lambda pid: False,
+    )
+    await supervisor.ensure_running()
+    spawns.calls.clear()
+
+    await supervisor.ensure_running()
+
+    assert "--tn-model-dir" not in spawns.calls[0][1]
 
 
 async def test_a_server_that_starts_first_time_is_not_respawned(tmp_path):
@@ -493,6 +588,20 @@ async def test_two_plugins_elect_one_server_through_the_shared_directory(tmp_pat
     assert await walkie.release() is False
     assert await voicebox.release() is True
     assert kills == [(4242, signal.SIGTERM)]
+
+
+async def test_the_shared_grammars_reach_the_server(tmp_path):
+    settings = ServerSettings.from_env({"SPEAK_CORE_STATE_DIR": str(tmp_path / "shared")})
+    grammars(settings.tn_dir)
+    spawns = Spawns()
+    supervisor = supervisor_for(
+        settings, spawn=spawns, probe=probe_ok, pid=1, is_alive=lambda pid: False
+    )
+
+    await supervisor.ensure_running()
+
+    args = spawns.calls[0][1]
+    assert args[args.index("--tn-model-dir") + 1] == str(tmp_path / "shared" / "tn_configs")
 
 
 @pytest.mark.parametrize(

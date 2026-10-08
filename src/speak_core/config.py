@@ -29,6 +29,9 @@ RANDOM_VOICE = "random"
 # name, so an older and a newer plugin never misread each other.
 SHARED_STATE_DIRNAME = "speak-core"
 SHARED_STATE_OVERRIDE = "SPEAK_CORE_STATE_DIR"
+# MagpieTTS's text-normalization grammars, in the shared directory unless `NEMO_TN_DIR`
+# names another: `install-nemo.sh` writes them, and the server reads them at start.
+TN_DIRNAME = "tn_configs"
 
 TRUTHY = frozenset({"1", "true", "yes", "on"})
 FALSY = frozenset({"0", "false", "no", "off"})
@@ -117,6 +120,7 @@ class ServerSettings:
     autostart: bool = True
     seed: int | None = None
     shared_dir: Path = Path()
+    tn_dir: Path = Path()
 
     @property
     def port(self) -> int:
@@ -125,6 +129,10 @@ class ServerSettings:
     @classmethod
     def from_env(cls, env: Mapping[str, str], *, platform: str | None = None) -> "ServerSettings":
         seed = env_number(env, "NEMO_TTS_SEED", None)
+        shared_dir = shared_state_dir(
+            env, platform=platform if platform is not None else sys.platform
+        )
+        tn_dir = env_text(env, "NEMO_TN_DIR")
         return cls(
             url=env_text(env, "NEMO_HTTP_URL") or DEFAULT_NEMO_URL,
             api_key=env_text(env, "NEMO_API_KEY"),
@@ -133,9 +141,8 @@ class ServerSettings:
             binary=env_text(env, "NEMO_BIN") or "nemo-speech",
             autostart=env_flag(env, "NEMO_AUTOSTART", default=True),
             seed=None if seed is None else int(seed),
-            shared_dir=shared_state_dir(
-                env, platform=platform if platform is not None else sys.platform
-            ),
+            shared_dir=shared_dir,
+            tn_dir=Path(tn_dir) if tn_dir else shared_dir / TN_DIRNAME,
         )
 
 

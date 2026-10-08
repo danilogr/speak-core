@@ -4,6 +4,8 @@
 set -euo pipefail
 
 BIN="${NEMO_BIN:-nemo-speech}"
+# speak-core-setup sets this to where the speech server reads its grammars.
+TN_DIR="${NEMO_TN_DIR:?run this through speak-core-setup, which sets NEMO_TN_DIR}"
 INSTALLER="${NEMO_INSTALLER:-https://github.com/NVIDIA/NeMo-Speech.cpp/raw/main/scripts/install.sh}"
 # The supervisor runs the server on --device auto. Below 0.2.0, MagpieTTS on Metal
 # returns DC saturation instead of speech on M5-class Macs, so older builds are upgraded.
@@ -47,8 +49,41 @@ echo "pulling the MagpieTTS model (640 MB with its codec, skipped if present)"
 echo "pulling the transcription model (710 MB, skipped if present)"
 "$BIN" pull nemotron-3.5
 
+# MagpieTTS speaks numbers, prices, times and some abbreviations only after the server
+# normalizes them into words, which takes these grammars. NVIDIA publishes them with each
+# release, and they are matched to it, so a different version replaces them. Speech
+# works without them, so a failed download warns rather than failing the setup.
+install_grammars() {
+  local marker="$TN_DIR/.nemo-speech-version" parent staging
+  if [ -f "$TN_DIR/en/verbalize.far" ] && [ "$(cat "$marker" 2>/dev/null)" = "$have" ]; then
+    echo "text-normalization grammars for $have already installed in $TN_DIR"
+    return 0
+  fi
+  echo "downloading the text-normalization grammars for $have (9 MB, 137 MB unpacked)"
+  parent="$(dirname "$TN_DIR")"
+  mkdir -p "$parent" || return 1
+  staging="$(mktemp -d "$parent/tn.XXXXXX")" || return 1
+  if curl -fsSL "https://github.com/NVIDIA/NeMo-Speech.cpp/releases/download/v$have/tn_configs.tar.bz2" |
+    tar -xjf - -C "$staging" &&
+    [ -f "$staging/tn_configs/en/tokenize_and_classify.far" ] &&
+    [ -f "$staging/tn_configs/en/verbalize.far" ]; then
+    echo "$have" >"$staging/tn_configs/.nemo-speech-version"
+    rm -rf "$TN_DIR" && mv "$staging/tn_configs" "$TN_DIR" && rm -rf "$staging"
+  else
+    rm -rf "$staging"
+    return 1
+  fi
+}
+
+if ! install_grammars; then
+  echo "could not install the text-normalization grammars for nemo-speech $have." >&2
+  echo "Speech still works, but numbers and some abbreviations are read badly." >&2
+  echo "Run this again to retry." >&2
+fi
+
 echo
 "$BIN" doctor
 echo
 echo "Done. NeMo-Speech.cpp and both models are installed; the plugins start and stop"
-echo "the speech server on their own."
+echo "the speech server on their own. A server already running picks up new grammars"
+echo "when it next starts."

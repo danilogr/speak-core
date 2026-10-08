@@ -69,8 +69,8 @@ def supervisor_for(
 
     Only `ServerSettings` goes in, so the server a plugin would start is the same
     whichever plugin starts it: it requests both models on the shared port with the
-    shared seed, and keeps its lock, pid record and client registry in the shared
-    state directory.
+    shared seed and text-normalization grammars, and keeps its lock, pid record and
+    client registry in the shared state directory.
     """
     return NemoSupervisor(
         state_dir=server.shared_dir,
@@ -81,6 +81,7 @@ def supervisor_for(
         model=server.tts_model,
         asr_model=server.asr_model,
         seed=server.seed,
+        tn_dir=server.tn_dir,
         pid=pid,
         is_alive=is_alive,
         kill=kill,

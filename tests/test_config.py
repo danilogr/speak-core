@@ -92,6 +92,15 @@ def test_the_shared_state_dir_can_be_overridden():
     assert server({"SPEAK_CORE_STATE_DIR": "/tmp/shared"}).shared_dir == Path("/tmp/shared")
 
 
+def test_the_text_normalization_grammars_live_in_the_shared_state_dir():
+    tn_dir = server({"SPEAK_CORE_STATE_DIR": "/tmp/shared"}).tn_dir
+    assert tn_dir == Path("/tmp/shared/tn_configs")
+
+
+def test_the_text_normalization_grammars_can_live_elsewhere():
+    assert server({"NEMO_TN_DIR": "/opt/tn"}).tn_dir == Path("/opt/tn")
+
+
 def test_a_plugin_state_dir_override_does_not_move_the_shared_one():
     shared = server({"HOME": "/Users/x", "SPEAK_STATE_DIR": "/tmp/state"}).shared_dir
     assert shared == Path("/Users/x/Library/Caches/speak-core")

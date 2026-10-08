@@ -26,6 +26,15 @@ TERMINATE_INTERVAL = 0.05
 Spawn = Callable[[str, Sequence[str]], Awaitable[int]]
 Probe = Callable[[], Awaitable[bool]]
 
+# What `--tn-model-dir` needs for English: the server exits at start on a directory
+# without a language's two grammars.
+TN_GRAMMARS = ("en/tokenize_and_classify.far", "en/verbalize.far")
+
+
+def has_grammars(directory: Path) -> bool:
+    """Whether `directory` holds the text-normalization grammars the server reads."""
+    return all((directory / name).is_file() for name in TN_GRAMMARS)
+
 
 def process_is_alive(pid: int) -> bool:
     try:
@@ -63,6 +72,7 @@ class NemoSupervisor:
         model: str = "magpie",
         asr_model: str | None = None,
         seed: int | None = None,
+        tn_dir: Path | None = None,
         pid: int | None = None,
         is_alive: Callable[[int], bool] = process_is_alive,
         kill: Callable[[int, int], None] = os.kill,
@@ -78,6 +88,7 @@ class NemoSupervisor:
         self._model = model
         self._asr_model = asr_model
         self._seed = seed
+        self._tn_dir = tn_dir
         self._pid = pid if pid is not None else os.getpid()
         self._is_alive = is_alive
         self._kill = kill
@@ -97,6 +108,8 @@ class NemoSupervisor:
             args += ["--asr-model", self._asr_model]
         if self._seed is not None:
             args += ["--tts.seed", str(self._seed)]
+        if self._tn_dir is not None and has_grammars(self._tn_dir):
+            args += ["--tn-model-dir", str(self._tn_dir)]
         return args
 
     def _take_lock(self) -> bool:
@@ -132,6 +145,11 @@ class NemoSupervisor:
         and returning before it does turns a several-second cold start into "there is no
         transcription model" at the call site, whose remedies are then all wrong.
 
+        A server that does not answer is retried without its text-normalization
+        grammars, then without its transcription model, so a part that will not load
+        costs that part and never speech. What was dropped stays dropped for this
+        supervisor's life: each failed attempt costs a full probe wait.
+
         The recorded server is checked here rather than only at the call sites,
         because a caller cannot always tell a dead server from a busy one: the TTS
         fallback fires on any HTTP failure, a 5xx or a timeout from a loaded server
@@ -151,17 +169,26 @@ class NemoSupervisor:
             await self._probe()
             return False
         try:
-            pid, answered = await self._start_once(self._server_args())
-            if answered or self._asr_model is None:
-                return True
-            logger.warning(
-                "the speech server did not answer with transcription model %s; "
-                "retrying without it so speech still works",
-                self._asr_model,
-            )
-            await self._terminate(pid)
-            self._asr_model = None
-            await self._start_once(self._server_args())
+            args = self._server_args()
+            pid, answered = await self._start_once(args)
+            if not answered and "--tn-model-dir" in args:
+                logger.warning(
+                    "the speech server did not answer with the text-normalization grammars "
+                    "in %s; retrying without them so speech still works",
+                    self._tn_dir,
+                )
+                await self._terminate(pid)
+                self._tn_dir = None
+                pid, answered = await self._start_once(self._server_args())
+            if not answered and self._asr_model is not None:
+                logger.warning(
+                    "the speech server did not answer with transcription model %s; "
+                    "retrying without it so speech still works",
+                    self._asr_model,
+                )
+                await self._terminate(pid)
+                self._asr_model = None
+                await self._start_once(self._server_args())
             return True
         finally:
             shutil.rmtree(self._lock_dir, ignore_errors=True)

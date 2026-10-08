@@ -59,8 +59,11 @@ tools and no commands, and it never reads the environment: plugins pass it a map
   utterance; a race is retried at the next poll. No two processes overlap unless the lock
   itself is unusable, or two processes reclaim a dead holder's lock at once.
 - **`supervisor.NemoSupervisor`** — starts, shares, and stops the local speech server.
-  `warm(reachable)` is the start a caller that can ask the port first uses. It must not
-  synthesize or play anything.
+  `warm(reachable)` is the start a caller that can ask the port first uses. It passes
+  `--tn-model-dir` only when the grammar directory holds the English grammars, because
+  the server exits at start without them. A server that does not answer is retried
+  without the grammars, then without the transcription model. It must not synthesize
+  or play anything.
 - **`player`** — resolves one command that plays a WAV, per platform, from the binaries
   actually present. Pure apart from the injected `which`, so the search is testable on
   any machine. Used by the `nemo` engine and by a plugin's own cues.
@@ -224,7 +227,8 @@ plugin stores is its own.
   `/v1/audio/transcriptions` and `/v1/models` endpoints and for the health probe. Its
   `MockTransport` lets the engine and the transcriber be tested without a live socket.
 - **NVIDIA NeMo-Speech.cpp** (https://github.com/NVIDIA/NeMo-Speech.cpp, optional) — the
-  local neural speech server: MagpieTTS for speech, Nemotron 3.5 for recognition.
+  local neural speech server: MagpieTTS for speech, Nemotron 3.5 for recognition, and
+  its text-normalization grammars (`tn_configs.tar.bz2` from the matching release).
   Installed by `speak-core-setup` and managed by the supervisor. Not vendored: it is a
   per-platform binary plus both models, which is over a gigabyte of download. Sizes
   are measured in the plugins' `harness/performance.md`.
@@ -316,6 +320,19 @@ plugin stores is its own.
   PATH. Known limitation: with neither Metal nor CUDA, `auto` is CPU, where 0.2.0
   synthesis is slow enough that most sentences time out and fall back to `say`.
 
+- **The speech server normalizes text, with NVIDIA's grammars.** MagpieTTS drops or
+  garbles digits, prices, times and phone numbers and misreads `Dr.` and `St.` as
+  written; with `--tn-model-dir` the server rewrites them as words before synthesis.
+  The grammars are NVIDIA's own, published with each NeMo-Speech.cpp release and run
+  by the server, so speak-core adds no dependency and writes no rules of its own: a
+  table of expansions would read `Nobel Dr.` as Nobel Doctor. The grammars make that
+  mistake too when no house number comes before the street, and that is accepted.
+  `install-nemo.sh` downloads them into `<cache>/speak-core/tn_configs` (`NEMO_TN_DIR`)
+  and replaces them when the installed version changes. Speech works without them,
+  so a failed download warns and the supervisor starts the server without them.
+  Rejected: NVIDIA's Python `nemo_text_processing`, which needs conda for pynini on
+  macOS and pulls in transformers.
+
 - **The `command` engine is a real feature.** It hands the sentence to any
   binary as its final argument, which covers piper, espeak, a script, or a remote
   speaker. It also happens to make the whole system testable without producing audio.
@@ -375,8 +392,8 @@ plugin stores is its own.
 - **Speech server settings are unprefixed and its state lives in a shared directory.**
   Whichever plugin starts the server decides its arguments for every plugin using it,
   so the settings that decide them (`NEMO_HTTP_URL`, `NEMO_API_KEY`, `NEMO_TTS_MODEL`,
-  `NEMO_ASR_MODEL`, `NEMO_BIN`, `NEMO_AUTOSTART`, `NEMO_TTS_SEED`) cannot belong to one
-  plugin, and `runtime.supervisor_for` builds the supervisor from them alone. Its start
+  `NEMO_ASR_MODEL`, `NEMO_BIN`, `NEMO_AUTOSTART`, `NEMO_TTS_SEED`, `NEMO_TN_DIR`)
+  cannot belong to one plugin, and `runtime.supervisor_for` builds the supervisor from them alone. Its start
   lock, pid record and client registry live in `<cache>/speak-core`, which every plugin
   resolves the same way, so the existing client registry is what lets one server serve
   several plugins. Those files' formats are a contract between speak-core versions: a

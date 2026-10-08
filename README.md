@@ -34,6 +34,7 @@ The speech server is shared, so its settings have no plugin prefix:
 | `NEMO_BIN` | `nemo-speech` | server binary |
 | `NEMO_AUTOSTART` | `1` | `0` to run the server yourself |
 | `NEMO_TTS_SEED` | unset | pins a voice's timbre across restarts |
+| `NEMO_TN_DIR` | `<cache>/speak-core/tn_configs` | text-normalization grammars |
 | `SPEAK_CORE_STATE_DIR` | `<cache>/speak-core` | where plugins coordinate |
 
 Every plugin on a machine must be given the same values for these. Whichever plugin
@@ -49,8 +50,10 @@ A voice belongs to one plugin and is read under its prefix: `<PREFIX>_ENGINE`,
 
     uv run --directory <plugin checkout> speak-core-setup
 
-installs `nemo-speech` 0.2.0 or later and pulls both models (about 1.4 GB). It reads
-`NEMO_BIN` and `NEMO_INSTALLER`.
+installs `nemo-speech` 0.2.0 or later, pulls both models (about 1.4 GB) and downloads
+the release's text-normalization grammars (9 MB), which let the server read numbers,
+prices, times and abbreviations as words. It reads `NEMO_BIN`, `NEMO_INSTALLER` and
+`NEMO_TN_DIR`. A server already running reads new grammars when it next starts.
 
 ## Development
 

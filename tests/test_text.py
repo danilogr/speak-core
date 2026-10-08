@@ -1,6 +1,6 @@
 import pytest
 
-from speak_core.text import close, normalize, pieces, sentences
+from speak_core.text import close, normalize, pieces, sentences, without_date_commas
 
 
 def test_collapses_all_whitespace_to_single_spaces():
@@ -175,3 +175,32 @@ def test_full_width_commas_cut_a_long_sentence_without_a_space_after_them():
 )
 def test_close_ends_a_piece_in_sentence_final_punctuation(piece, expected):
     assert close(piece) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("It happened on May 3, 1999.", "It happened on May 3 1999."),
+        ("The launch is on Oct. 8, 2026, at noon.", "The launch is on Oct. 8 2026, at noon."),
+        ("On Monday, May 3rd, 1999 it rained.", "On Monday, May 3rd 1999 it rained."),
+        ("Due September 30, 1999 and Sept. 1, 2000.", "Due September 30 1999 and Sept. 1 2000."),
+        ("It happened in May, 1999.", "It happened in May 1999."),
+    ],
+)
+def test_the_comma_between_a_month_or_day_and_its_year_is_dropped(text, expected):
+    assert without_date_commas(text) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "We may, 1999 times over, be wrong.",
+        "Room 3, 1999 guests.",
+        "On May 3, 99 people came.",
+        "On May 3, 19999 people came.",
+        "In Mayfair, 1999 was quiet.",
+        "Monday, May 3 1999.",
+    ],
+)
+def test_other_commas_before_a_number_are_kept(text):
+    assert without_date_commas(text) == text

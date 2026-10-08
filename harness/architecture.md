@@ -30,7 +30,9 @@ tools and no commands, and it never reads the environment: plugins pass it a map
   sentence, nor does one after `Mr`, `Mrs`, `Dr`, `St` or a month's abbreviation, the
   list NVIDIA's English text-normalization grammar does not break after; and the
   full-width marks of Chinese and Japanese (`。`, `，`) cut without a space after them.
-  `close` ends a piece in sentence-final punctuation. Pure; no I/O.
+  `close` ends a piece in sentence-final punctuation. `without_date_commas` drops the
+  comma between a month or day and its year, which the server's text normalization
+  speaks as "sil"; `NemoSynthesizer` applies it to every request. Pure; no I/O.
 - **`engines`** — a `Protocol` and three implementations (`say`, `nemo`, `command`).
   An engine turns a sentence into an `Utterance`: a command, its arguments, and an
   optional async cleanup. Engines must not play audio or manage processes themselves.
@@ -331,7 +333,10 @@ plugin stores is its own.
   and replaces them when the installed version changes. Speech works without them,
   so a failed download warns and the supervisor starts the server without them.
   Rejected: NVIDIA's Python `nemo_text_processing`, which needs conda for pynini on
-  macOS and pulls in transformers.
+  macOS and pulls in transformers. Known limitation: in NeMo-Speech.cpp 0.2.0 the
+  grammars make MagpieTTS say "sil" between a date's day and year when a comma
+  separates them (`May 3, 1999`), so that comma is dropped before every request
+  until a release fixes it (speak-core issue #1).
 
 - **The `command` engine is a real feature.** It hands the sentence to any
   binary as its final argument, which covers piper, espeak, a script, or a remote

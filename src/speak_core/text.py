@@ -24,6 +24,12 @@ _NO_BREAK_AFTER = re.compile(
 )
 # The longest of those, its full stop, and the character before it.
 _NO_BREAK_REACH = 5
+# A comma between a month, or a month and day, and a four-digit year: `May 3, 1999`.
+_MONTH = (
+    r"(?:January|February|March|April|May|June|July|August|September|October|November"
+    r"|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec)\.?"
+)
+_DATE_COMMA = re.compile(rf"\b({_MONTH}(?:\s+\d{{1,2}}(?:st|nd|rd|th)?)?),(?=\s+\d{{4}}\b)")
 
 
 def normalize(text: str | None) -> str:
@@ -80,6 +86,14 @@ def pieces(text: str, *, max_chars: int) -> list[str]:
     elif held:
         cut.append(held)
     return cut
+
+
+def without_date_commas(text: str) -> str:
+    """`text` without the comma between a month or a month and day and its year (`May 3,
+    1999` as `May 3 1999`). NeMo-Speech.cpp 0.2.0's text normalization says an audible
+    "sil" there; without the comma it reads the date cleanly. Remove once a release
+    fixes it (issue #1)."""
+    return _DATE_COMMA.sub(r"\1", text)
 
 
 def close(piece: str) -> str:

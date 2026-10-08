@@ -6,7 +6,7 @@ from pathlib import Path
 import httpx2
 import pytest
 
-from speak_core.engines.nemo import PIECE_CHARS, PIECE_PAUSE_MS, NemoEngine
+from speak_core.engines.nemo import PIECE_CHARS, PIECE_PAUSE_MS, NemoEngine, NemoSynthesizer
 from speak_core.engines.say import SayEngine
 from speak_core.player import Player
 
@@ -82,6 +82,22 @@ async def test_sends_the_configured_model_and_the_default_voice():
     assert seen[0]["voice"] == "John"
     assert seen[0]["input"] == "hello"
     assert seen[0]["response_format"] == "wav"
+
+
+async def test_a_dates_comma_before_its_year_never_reaches_the_server():
+    """Its text normalization says "sil" there; voice-overs use the synthesizer directly."""
+    seen: list[str] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(json.loads(request.content)["input"])
+        return httpx2.Response(200, content=WAV)
+
+    synthesizer = NemoSynthesizer(
+        base_url="http://speech", client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
+    )
+    await synthesizer.synthesize("Due Oct. 8, 2026, at noon.", voice=None)
+
+    assert seen == ["Due Oct. 8 2026, at noon."]
 
 
 async def test_an_explicit_voice_overrides_the_default():

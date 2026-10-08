@@ -16,13 +16,17 @@ tools and no commands, and it never reads the environment: plugins pass it a map
 - **`config`** — the settings every plugin reads the same way, each a frozen dataclass
   built from a mapping: `ServerSettings` (the shared speech server, from unprefixed
   `NEMO_*` variables, plus the shared state directory) and `VoiceSettings` (engine,
-  voice, pool, rate, cap and command, read under the prefix the plugin names, as
+  voice, pool, rate and command, read under the prefix the plugin names, as
   `<PREFIX>_ENGINE`, `<PREFIX>_VOICE` and so on). Unparsable values fall back to
   defaults with a warning. It must not read the environment itself. One other module
   touches the environment at all: `engines.say` reads `LANG` to filter `say -v '?'` by
   locale, which is the platform's setting rather than a plugin's configuration.
-- **`text.normalize`** — collapses whitespace, enforces the length cap at a word
-  boundary, rejects empty input. Pure; no I/O.
+- **`text`** — `normalize` collapses whitespace and rejects empty input; it never cuts
+  text. `sentences` cuts a text into the utterances a plugin queues, so the first plays
+  while the next is synthesized. `pieces` cuts a text
+  into what a speech model is sent one request at a time: a sentence a piece, a sentence
+  over the limit at its clauses, then its words, and a one-word sentence (`Dr.`) with the
+  next; `close` ends a piece in sentence-final punctuation. Pure; no I/O.
 - **`engines`** — a `Protocol` and three implementations (`say`, `nemo`, `command`).
   An engine turns a sentence into an `Utterance`: a command, its arguments, and an
   optional async cleanup. Engines must not play audio or manage processes themselves.
@@ -30,6 +34,11 @@ tools and no commands, and it never reads the environment: plugins pass it a map
   `engines.nemo.NemoSynthesizer` is the HTTP half of the `nemo` engine, public so a plugin
   that writes audio files can call it with its own per-request timeout and get
   `SynthesisFailed` instead of a `say` fallback; `NemoEngine` delegates its requests to it.
+  `NemoEngine` sends a text of more than one piece (`text.pieces`, 250 characters) a
+  piece a request and joins the audio with a 250 ms pause into one utterance, because
+  MagpieTTS repeats and garbles words when one request holds several sentences or one
+  long one. A piece that fails sends the whole text to the fallback, so no sentence is
+  spoken in two voices.
 - **`queue.SpeechQueue`** — owns playback. Exactly one child process runs at a time.
   `enqueue` is synchronous and returns the number of utterances ahead; a single worker
   task drains the queue. `drain()` waits until nothing is queued, being synthesized, or

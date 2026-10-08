@@ -17,8 +17,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlparse
 
-from speak_core.text import DEFAULT_MAX_CHARS
-
 logger = logging.getLogger(__name__)
 
 DEFAULT_NEMO_URL = "http://127.0.0.1:8082"
@@ -151,7 +149,6 @@ class VoiceSettings:
     randomize_voice: bool = False
     voice_pool: tuple[str, ...] = ()
     rate: float | None = None
-    max_chars: int = DEFAULT_MAX_CHARS
     command: str | None = None
 
     def key(self, name: str) -> str:
@@ -170,12 +167,6 @@ class VoiceSettings:
         def key(name: str) -> str:
             return f"{prefix}_{name}"
 
-        cap = env_number(env, key("MAX_CHARS"), DEFAULT_MAX_CHARS)
-        if cap is None or cap < 1:
-            if cap is not None:
-                logger.warning("ignoring %s=%s: must be positive", key("MAX_CHARS"), cap)
-            cap = DEFAULT_MAX_CHARS
-
         wanted = env_text(env, key("VOICE"))
         randomize = (wanted or "").lower() == RANDOM_VOICE
         return cls(
@@ -185,6 +176,5 @@ class VoiceSettings:
             randomize_voice=randomize,
             voice_pool=env_list(env, key("VOICE_POOL")),
             rate=env_number(env, key("RATE"), None),
-            max_chars=int(cap),
             command=env_text(env, key("COMMAND")),
         )

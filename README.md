@@ -42,7 +42,7 @@ starts the server decides its arguments for all of them; plugins that disagree o
 cannot see each other's sessions, so one can stop the server the other is using.
 
 A voice belongs to one plugin and is read under its prefix: `<PREFIX>_ENGINE`,
-`<PREFIX>_VOICE`, `<PREFIX>_VOICE_POOL`, `<PREFIX>_RATE`, `<PREFIX>_MAX_CHARS`,
+`<PREFIX>_VOICE`, `<PREFIX>_VOICE_POOL`, `<PREFIX>_RATE`,
 `<PREFIX>_COMMAND`. speak-core never reads the environment itself; plugins pass it.
 
 ## Installing NeMo-Speech.cpp

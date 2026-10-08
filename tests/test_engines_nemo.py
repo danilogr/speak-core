@@ -1,10 +1,12 @@
+import io
 import json
+import wave
 from pathlib import Path
 
 import httpx2
 import pytest
 
-from speak_core.engines.nemo import NemoEngine
+from speak_core.engines.nemo import PIECE_CHARS, PIECE_PAUSE_MS, NemoEngine
 from speak_core.engines.say import SayEngine
 from speak_core.player import Player
 
@@ -262,3 +264,119 @@ async def test_lists_only_the_voices_that_are_names():
         return httpx2.Response(200, json=listing)
 
     assert await engine_over(handler).list_voices() == ["John", "Aria"]
+
+
+def pcm_wav(frames: int, *, rate: int = 22050, value: int = 1) -> bytes:
+    out = io.BytesIO()
+    with wave.open(out, "wb") as handle:
+        handle.setnchannels(1)
+        handle.setsampwidth(2)
+        handle.setframerate(rate)
+        handle.writeframes(value.to_bytes(2, "little") * frames)
+    return out.getvalue()
+
+
+# Three sentences of about 100 characters, so the text is past PIECE_CHARS but each
+# sentence fits in it.
+SENTENCES = [
+    f"Sentence number {n} carries enough words to be a real one, " + "and more " * 4 + "here."
+    for n in range(3)
+]
+LONG = " ".join(SENTENCES)
+
+
+def recording(seen: list[str], *, frames: int = 100):
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(json.loads(request.content)["input"])
+        return httpx2.Response(200, content=pcm_wav(frames, value=len(seen)))
+
+    return handler
+
+
+async def test_a_text_that_is_one_piece_is_sent_as_it_is():
+    seen: list[str] = []
+    utterance = await engine_over(recording(seen)).prepare("One. Two words", voice=None, rate=None)
+    await utterance.cleanup()
+    assert seen == ["One. Two words"]
+
+
+async def test_each_sentence_of_a_text_is_its_own_request():
+    """MagpieTTS repeats and garbles words when one request holds several sentences."""
+    seen: list[str] = []
+    utterance = await engine_over(recording(seen)).prepare(
+        "First one here. Second one here.", voice=None, rate=None
+    )
+    await utterance.cleanup()
+    assert seen == ["First one here.", "Second one here."]
+
+
+async def test_a_sentence_past_the_piece_size_goes_a_clause_at_a_time_each_closed():
+    seen: list[str] = []
+    clause = "a clause long enough to count for something real"
+    sentence = ", ".join([clause] * 8) + "."
+    assert len(sentence) > PIECE_CHARS
+    utterance = await engine_over(recording(seen)).prepare(sentence, voice=None, rate=None)
+    await utterance.cleanup()
+
+    assert len(seen) > 1
+    assert all(len(piece) <= PIECE_CHARS for piece in seen)
+    assert all(piece.endswith(".") for piece in seen)
+    assert " ".join(seen).replace(".", ",").rstrip(",") == sentence.rstrip(".")
+
+
+async def test_the_pieces_audio_is_joined_in_order_with_a_pause_between_each_two():
+    seen: list[str] = []
+    utterance = await engine_over(recording(seen)).prepare(LONG, voice=None, rate=None)
+    written = Path(utterance.args[-1]).read_bytes()
+    await utterance.cleanup()
+
+    pause = 22050 * PIECE_PAUSE_MS // 1000
+    with wave.open(io.BytesIO(written)) as handle:
+        assert (handle.getnchannels(), handle.getsampwidth(), handle.getframerate()) == (
+            1,
+            2,
+            22050,
+        )
+        frames = handle.readframes(handle.getnframes())
+    silence = b"\0\0" * pause
+    assert frames == silence.join(
+        (n).to_bytes(2, "little") * 100 for n in range(1, len(SENTENCES) + 1)
+    )
+    assert utterance.audio_ms == round((3 * 100 + 2 * pause) / 22050 * 1000)
+
+
+async def test_a_piece_the_server_fails_sends_the_whole_text_to_the_fallback():
+    """Half a sentence in the neural voice and half in `say` would be worse than all of
+    it in `say`."""
+    notified: list[bool] = []
+    seen: list[str] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        seen.append(json.loads(request.content)["input"])
+        return httpx2.Response(503) if len(seen) == 2 else httpx2.Response(200, content=pcm_wav(10))
+
+    engine = engine_over(
+        handler, fallback=SayEngine(), on_unavailable=lambda: notified.append(True)
+    )
+    utterance = await engine.prepare(LONG, voice=None, rate=None)
+
+    assert (utterance.command, utterance.args) == ("say", [LONG])
+    assert len(seen) == 2
+    assert notified == [True]
+
+
+@pytest.mark.parametrize(
+    "second",
+    [pcm_wav(10, rate=16000), b"RIFF\x00\x00\x00\x00WAVEnot really"],
+    ids=["another rate", "not pcm"],
+)
+async def test_pieces_that_cannot_be_joined_send_the_text_to_the_fallback(second):
+    answers = iter([pcm_wav(10), second, pcm_wav(10)])
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, content=next(answers))
+
+    utterance = await engine_over(handler, fallback=SayEngine()).prepare(
+        LONG, voice=None, rate=None
+    )
+    assert (utterance.command, utterance.args) == ("say", [LONG])

@@ -14,10 +14,17 @@ import httpx2
 from speak_core.engines.base import Engine, Utterance
 from speak_core.engines.say import SayEngine
 from speak_core.player import Player, resolve_player
+from speak_core.text import close, pieces
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_TIMEOUT = 15.0
+
+# MagpieTTS repeats and garbles words when one request holds several sentences, and says
+# the last words of a long one again after it, so text goes to the server a sentence at
+# a time, a sentence over this cut at its clauses, and the audio is joined with a pause.
+PIECE_CHARS = 250
+PIECE_PAUSE_MS = 250
 
 # The speakers of the MagpieTTS model the plugin installs. Telemetry records these
 # names as they are and any other voice - another model's, or another
@@ -39,6 +46,39 @@ def _wav_duration_ms(wav: bytes) -> int | None:
     except (wave.Error, EOFError):
         return None
     return round(frames / rate * 1000) if rate > 0 else None
+
+
+def _pcm(wav: bytes) -> tuple[wave._wave_params, bytes]:
+    with wave.open(io.BytesIO(wav)) as handle:
+        return handle.getparams(), handle.readframes(handle.getnframes())
+
+
+def _joined(parts: list[bytes], *, pause_ms: int) -> bytes:
+    """One WAV holding `parts` (at least one) in order, `pause_ms` of silence between each two.
+
+    Raises:
+        SynthesisFailed: a part is not PCM audio, or not in the format of the first.
+    """
+    try:
+        read = [_pcm(part) for part in parts]
+    except (wave.Error, EOFError) as error:
+        raise SynthesisFailed(
+            f"the speech server's audio could not be joined: {error}",
+            kind=SynthesisFailed.REFUSED,
+        ) from error
+    params = read[0][0]
+    # Channels, sample width and rate; the frame count differs from part to part.
+    if any(other[:3] != params[:3] for other, _ in read):
+        raise SynthesisFailed(
+            "the speech server answered one text in two audio formats",
+            kind=SynthesisFailed.REFUSED,
+        )
+    silence = b"\0" * (params.framerate * pause_ms // 1000 * params.sampwidth * params.nchannels)
+    out = io.BytesIO()
+    with wave.open(out, "wb") as handle:
+        handle.setparams(params)
+        handle.writeframes(silence.join(frames for _, frames in read))
+    return out.getvalue()
 
 
 def _is_wav(body: bytes) -> bool:
@@ -180,7 +220,7 @@ class NemoEngine:
 
     async def prepare(self, text: str, *, voice: str | None, rate: float | None) -> Utterance:
         try:
-            audio = await self._speech.synthesize(text, voice=voice or self.default_voice)
+            audio = await self._synthesize(text, voice=voice or self.default_voice)
         except SynthesisFailed as error:
             logger.warning("speech server unavailable, using say instead: %s", error)
             if self._on_unavailable is not None:
@@ -208,6 +248,16 @@ class NemoEngine:
             engine=self.name,
             voice=voice or self.default_voice,
         )
+
+    async def _synthesize(self, text: str, *, voice: str | None) -> bytes:
+        """`text` a request a piece (`text.pieces`), the audio joined; a text that is one
+        piece is sent as it is."""
+        # One character of each piece is left for the full stop `close` may add.
+        cut = pieces(text, max_chars=PIECE_CHARS - 1)
+        if len(cut) <= 1:
+            return await self._speech.synthesize(text, voice=voice)
+        parts = [await self._speech.synthesize(close(piece), voice=voice) for piece in cut]
+        return _joined(parts, pause_ms=PIECE_PAUSE_MS)
 
     async def list_voices(self) -> list[str]:
         return await self._speech.list_voices()

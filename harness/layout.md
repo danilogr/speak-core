@@ -48,7 +48,7 @@
 | [`config.py`](../src/speak_core/config.py) | Settings every plugin reads the same way: shared `NEMO_*` server settings, a prefixed voice, and the plugin and shared state directories. |
 | [`runtime.py`](../src/speak_core/runtime.py) | Logging for the plugin's and the core's loggers, the speech server health probe, and the supervisor factory. |
 | [`queue.py`](../src/speak_core/queue.py) | Serial speech queue: plays sentences in order without overlapping, prepares the next sentence while one plays, and handles cancellations. |
-| [`text.py`](../src/speak_core/text.py) | Text formatting: collapses multi-line text to a single line and caps sentences at word boundaries (default 400 characters). |
+| [`text.py`](../src/speak_core/text.py) | Text formatting: collapses multi-line text to a single line, and cuts it into the sentences a plugin queues and the clauses a speech model is sent one at a time. |
 | [`player.py`](../src/speak_core/player.py) | Finds an installed audio player command for the current platform (`afplay` on macOS, PowerShell on Windows, `paplay`/`aplay`/`ffplay` on Linux). |
 | [`exclusive.py`](../src/speak_core/exclusive.py) | Cross-process lock using filesystem directories, with automatic cleanup if a process exits unexpectedly. |
 | [`speaker.py`](../src/speak_core/speaker.py) | Cross-process speaker lock: one utterance plays at a time across every process that speaks, with turns that alternate. |
@@ -97,11 +97,11 @@ Offline tests executed with `uv run pytest`:
 | [`tests/test_runtime.py`](../tests/test_runtime.py) | Logging on both loggers, the health probe, and the supervisor factory. |
 | [`tests/test_engine_selection.py`](../tests/test_engine_selection.py) | `build_engine`: which engine each voice setting selects, and the `say` fallback. |
 | [`tests/test_engines_say.py`](../tests/test_engines_say.py) | The `say` engine. |
-| [`tests/test_engines_nemo.py`](../tests/test_engines_nemo.py) | The `nemo` engine under normal, degraded, and fallback conditions. |
+| [`tests/test_engines_nemo.py`](../tests/test_engines_nemo.py) | The `nemo` engine under normal, degraded, and fallback conditions, and a long text sent in pieces and joined. |
 | [`tests/test_synthesizer.py`](../tests/test_synthesizer.py) | `NemoSynthesizer`: the request it sends and the `SynthesisFailed` kinds it raises. |
 | [`tests/test_engines_command.py`](../tests/test_engines_command.py) | The `command` engine. |
 | [`tests/test_asr.py`](../tests/test_asr.py) | The transcription client and the speech server liveness check. |
-| [`tests/test_text.py`](../tests/test_text.py) | Whitespace collapsing and the length cap. |
+| [`tests/test_text.py`](../tests/test_text.py) | Whitespace collapsing, and cutting text into sentences and pieces. |
 | [`tests/test_player.py`](../tests/test_player.py) | Finding a sound player per platform with an injected lookup. |
 | [`tests/test_queue.py`](../tests/test_queue.py) | FIFO playback order, depth-1 prefetch pipelining, and `stop` cancellation. |
 | [`tests/test_exclusive.py`](../tests/test_exclusive.py) | One holder at a time across processes, elected by an atomic `mkdir`. |

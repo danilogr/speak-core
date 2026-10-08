@@ -9,7 +9,6 @@ from speak_core.config import (
     VoiceSettings,
     plugin_state_dir,
 )
-from speak_core.text import DEFAULT_MAX_CHARS
 
 
 def server(env: dict[str, str], platform: str = "darwin") -> ServerSettings:
@@ -122,7 +121,6 @@ def test_voice_defaults_when_nothing_is_set():
     assert settings.randomize_voice is False
     assert settings.voice_pool == ()
     assert settings.rate is None
-    assert settings.max_chars == DEFAULT_MAX_CHARS
     assert settings.command is None
 
 
@@ -132,14 +130,12 @@ def test_voice_settings_are_read_under_the_plugins_prefix():
             "WALKIE_ENGINE": "Command",
             "WALKIE_VOICE": "Sofia",
             "WALKIE_RATE": "190",
-            "WALKIE_MAX_CHARS": "120",
             "WALKIE_COMMAND": "piper --model x",
         }
     )
     assert settings.engine == "command"
     assert settings.voice == "Sofia"
     assert settings.rate == 190
-    assert settings.max_chars == 120
     assert settings.command == "piper --model x"
 
 
@@ -154,18 +150,10 @@ def test_key_names_a_setting_under_the_prefix():
 
 
 def test_unparsable_numbers_fall_back_to_the_default():
-    settings = voice({"WALKIE_MAX_CHARS": "lots", "WALKIE_RATE": "fast"})
-    assert settings.max_chars == DEFAULT_MAX_CHARS
-    assert settings.rate is None
-
-
-def test_a_zero_or_negative_cap_falls_back_to_the_default():
-    assert voice({"WALKIE_MAX_CHARS": "0"}).max_chars == DEFAULT_MAX_CHARS
-    assert voice({"WALKIE_MAX_CHARS": "-5"}).max_chars == DEFAULT_MAX_CHARS
+    assert voice({"WALKIE_RATE": "fast"}).rate is None
 
 
 def test_a_non_finite_number_never_reaches_the_settings():
-    assert voice({"WALKIE_MAX_CHARS": "nan"}).max_chars == DEFAULT_MAX_CHARS
     assert voice({"WALKIE_RATE": "nan"}).rate is None
 
 

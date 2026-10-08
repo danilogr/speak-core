@@ -3,13 +3,19 @@
 import re
 
 _WHITESPACE = re.compile(r"\s+")
-# Sentence ends (with any closing quote or bracket) and clause breaks, followed by the
-# whitespace a piece may be cut at. A sentence end followed by a lowercase word is an
-# abbreviation (`e.g. here`), not an end. Typographic characters are written as escapes.
-_SENTENCE_END = re.compile(r"[.!?\u2026][\"'\u201d\u2019)\]]*(\s+)(?![a-z])")
-_CLAUSE_END = re.compile(r"[,;:\u2014\u2013](\s+)")
-_FINAL = re.compile(r"[.!?\u2026][\"'\u201d\u2019)\]]*$")
-_TRAILING_CLAUSE = re.compile(r"\s*[,;:\u2014\u2013]+$")
+# Sentence ends and clause breaks, each with any closing quote or bracket after it, and
+# the whitespace a piece may be cut at. Latin punctuation needs whitespace after it; the
+# full-width marks of Chinese and Japanese, written without spaces, do not. Typographic
+# characters are written as escapes.
+_CLOSERS = r"[\"'\u201d\u2019)\]\u300d\u300f\uff09]*"
+_SENTENCE_END = re.compile(rf"(?:[.!?\u2026]{_CLOSERS}(?=\s)|[\u3002\uff01\uff1f]{_CLOSERS})(\s*)")
+_CLAUSE_END = re.compile(
+    rf"(?:[,;:\u2014\u2013]{_CLOSERS}(?=\s)|[\uff0c\u3001\uff1b\uff1a]{_CLOSERS})(\s*)"
+)
+_FINAL = re.compile(rf"[.!?\u2026\u3002\uff01\uff1f]{_CLOSERS}$")
+_FULL_WIDTH_FINAL = re.compile(rf"[\u3002\uff01\uff1f]{_CLOSERS}$")
+_TRAILING_CLAUSE = re.compile(rf"\s*[,;:\u2014\u2013\uff0c\u3001\uff1b\uff1a]+({_CLOSERS})$")
+_WORD = re.compile(r"\w")
 
 
 def normalize(text: str | None) -> str:
@@ -38,7 +44,8 @@ def pieces(text: str, *, max_chars: int) -> list[str]:
     sentence over `max_chars` is cut at its clauses, packed up to the limit, then at its
     words, and a word longer than the limit where the limit falls. A one-word sentence,
     usually an abbreviation such as `Dr.`, goes with the sentence after it when both
-    fit. Every character but the whitespace a cut falls on is kept.
+    fit; one holding no word (`!!!`) at the end goes with the sentence before it. Every
+    character but the whitespace a cut falls on is kept.
 
     Raises:
         ValueError: `max_chars` is under 1.
@@ -47,20 +54,22 @@ def pieces(text: str, *, max_chars: int) -> list[str]:
         raise ValueError(f"max_chars must be at least 1, not {max_chars}")
     cut: list[str] = []
     held = ""  # a one-word sentence waiting for the sentence after it
-    for sentence in _split_after(_SENTENCE_END, text):
+    for sentence in _split_after(_SENTENCE_END, text, unless_lowercase=True):
         if held:
             if len(held) + 1 + len(sentence) <= max_chars:
                 sentence = f"{held} {sentence}"
             else:
                 cut.append(held)
             held = ""
-        if " " not in sentence and len(sentence) <= max_chars:
+        if _one_word(sentence) and len(sentence) <= max_chars:
             held = sentence
         elif len(sentence) <= max_chars:
             cut.append(sentence)
         else:
             cut += _pack(_clauses(sentence, max_chars), max_chars)
-    if held:
+    if held and cut and not _WORD.search(held) and len(cut[-1]) + 1 + len(held) <= max_chars:
+        cut[-1] = f"{cut[-1]} {held}"
+    elif held:
         cut.append(held)
     return cut
 
@@ -70,13 +79,29 @@ def close(piece: str) -> str:
     a trailing clause mark becomes a full stop, and a piece with neither gets one."""
     if _FINAL.search(piece):
         return piece
-    return _TRAILING_CLAUSE.sub("", piece) + "."
+    trailing = _TRAILING_CLAUSE.search(piece)
+    if trailing is None:
+        return piece + "."
+    return piece[: trailing.start()] + "." + trailing.group(1)
 
 
-def _split_after(pattern: re.Pattern[str], text: str) -> list[str]:
-    """`text` cut at each whitespace run `pattern` marks; the punctuation stays left."""
+def _one_word(sentence: str) -> bool:
+    """Whether `sentence` is one word, as an abbreviation (`Dr.`) is: no space in it, and
+    not a sentence of a language written without spaces."""
+    return " " not in sentence and _FULL_WIDTH_FINAL.search(sentence) is None
+
+
+def _split_after(
+    pattern: re.Pattern[str], text: str, *, unless_lowercase: bool = False
+) -> list[str]:
+    """`text` cut at each whitespace run `pattern` marks; the punctuation stays left. With
+    `unless_lowercase`, a mark followed by whitespace and a lowercase letter, as an
+    abbreviation is (`e.g. here`, `z. B. überall`), is no cut."""
     cut, start = [], 0
     for match in pattern.finditer(text):
+        gap, after = match.group(1), text[match.end(1) : match.end(1) + 1]
+        if unless_lowercase and gap and after.islower():
+            continue
         cut.append(text[start : match.start(1)])
         start = match.end(1)
     cut.append(text[start:])

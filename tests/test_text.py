@@ -77,6 +77,17 @@ def test_a_one_word_sentence_goes_with_the_sentence_after_it(text, expected):
     assert pieces(text, max_chars=100) == expected
 
 
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("Hello world. !!!", ["Hello world. !!!"]),
+        ("Hello world. Yes.", ["Hello world.", "Yes."]),
+    ],
+)
+def test_a_wordless_last_sentence_goes_with_the_one_before_it(text, expected):
+    assert pieces(text, max_chars=100) == expected
+
+
 def test_a_one_word_sentence_stands_alone_when_the_next_would_not_fit_with_it():
     assert pieces("Yes. That is quite right.", max_chars=20) == ["Yes.", "That is quite right."]
 
@@ -98,6 +109,33 @@ def test_a_limit_under_one_is_refused():
         pieces("word", max_chars=0)
 
 
+def test_an_abbreviation_before_a_lowercase_letter_of_any_alphabet_ends_no_sentence():
+    text = "Il faut, p. ex. \u00e9videmment, le faire, e.g. \u00e9clair."
+    assert sentences(text) == [text]
+
+
+def test_a_clause_mark_inside_a_closing_quote_still_cuts():
+    text = 'She said, "Wait," and then she left the room without another word.'
+    assert pieces(text, max_chars=30) == [
+        'She said, "Wait,"',
+        "and then she left the room",
+        "without another word.",
+    ]
+
+
+# Chinese, written without spaces: "this is the first sentence." and "the second!"
+FIRST, SECOND = "\u8fd9\u662f\u7b2c\u4e00\u53e5\u3002", "\u7b2c\u4e8c\u53e5\uff01"
+CLAUSE, END = "\u4e00\u4e8c\u4e09\u56db\uff0c", "\u5b8c\u3002"
+
+
+def test_full_width_punctuation_ends_a_sentence_without_a_space_after_it():
+    assert sentences(FIRST + SECOND) == [FIRST, SECOND]
+
+
+def test_full_width_commas_cut_a_long_sentence_without_a_space_after_them():
+    assert pieces(CLAUSE * 4 + END, max_chars=10) == [CLAUSE, CLAUSE, CLAUSE, f"{CLAUSE} {END}"]
+
+
 @pytest.mark.parametrize(
     ("piece", "expected"),
     [
@@ -107,6 +145,9 @@ def test_a_limit_under_one_is_refused():
         ("a clause,", "a clause."),
         ("a clause \u2014", "a clause."),
         ("no punctuation", "no punctuation."),
+        ('a "quoted clause,"', 'a "quoted clause."'),
+        (CLAUSE, CLAUSE[:-1] + "."),
+        (FIRST, FIRST),
     ],
 )
 def test_close_ends_a_piece_in_sentence_final_punctuation(piece, expected):

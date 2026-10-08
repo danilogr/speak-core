@@ -61,23 +61,26 @@ def _joined(parts: list[bytes], *, pause_ms: int) -> bytes:
     """
     try:
         read = [_pcm(part) for part in parts]
+        params = read[0][0]
+        # Channels, sample width and rate; the frame count differs from part to part.
+        if any(other[:3] != params[:3] for other, _ in read):
+            raise SynthesisFailed(
+                "the speech server answered one text in two audio formats",
+                kind=SynthesisFailed.REFUSED,
+            )
+        # 8-bit WAV samples are unsigned, so their silence is the midpoint, not zero.
+        quiet = b"\x80" if params.sampwidth == 1 else b"\0"
+        frames = params.framerate * pause_ms // 1000
+        silence = quiet * (frames * params.sampwidth * params.nchannels)
+        out = io.BytesIO()
+        with wave.open(out, "wb") as handle:
+            handle.setparams(params)
+            handle.writeframes(silence.join(audio for _, audio in read))
     except (wave.Error, EOFError) as error:
         raise SynthesisFailed(
             f"the speech server's audio could not be joined: {error}",
             kind=SynthesisFailed.REFUSED,
         ) from error
-    params = read[0][0]
-    # Channels, sample width and rate; the frame count differs from part to part.
-    if any(other[:3] != params[:3] for other, _ in read):
-        raise SynthesisFailed(
-            "the speech server answered one text in two audio formats",
-            kind=SynthesisFailed.REFUSED,
-        )
-    silence = b"\0" * (params.framerate * pause_ms // 1000 * params.sampwidth * params.nchannels)
-    out = io.BytesIO()
-    with wave.open(out, "wb") as handle:
-        handle.setparams(params)
-        handle.writeframes(silence.join(frames for _, frames in read))
     return out.getvalue()
 
 

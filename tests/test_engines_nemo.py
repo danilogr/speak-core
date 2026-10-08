@@ -380,3 +380,39 @@ async def test_pieces_that_cannot_be_joined_send_the_text_to_the_fallback(second
         LONG, voice=None, rate=None
     )
     assert (utterance.command, utterance.args) == ("say", [LONG])
+
+
+async def test_audio_that_cannot_be_written_back_sends_the_text_to_the_fallback(monkeypatch):
+    def refuse(self, params) -> None:
+        raise wave.Error("cannot write compressed Wave files")
+
+    monkeypatch.setattr(wave.Wave_write, "setparams", refuse)
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        return httpx2.Response(200, content=pcm_wav(10))
+
+    utterance = await engine_over(handler, fallback=SayEngine()).prepare(
+        LONG, voice=None, rate=None
+    )
+    assert (utterance.command, utterance.args) == ("say", [LONG])
+
+
+async def test_the_pause_between_8_bit_pieces_is_silence_not_the_loudest_sample():
+    """8-bit WAV samples are unsigned: 0x80 is silence, and 0x00 the bottom of the wave."""
+
+    def eight_bit(request: httpx2.Request) -> httpx2.Response:
+        out = io.BytesIO()
+        with wave.open(out, "wb") as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(1)
+            handle.setframerate(8000)
+            handle.writeframes(b"\x90" * 10)
+        return httpx2.Response(200, content=out.getvalue())
+
+    utterance = await engine_over(eight_bit).prepare(LONG, voice=None, rate=None)
+    written = Path(utterance.args[-1]).read_bytes()
+    await utterance.cleanup()
+    with wave.open(io.BytesIO(written)) as handle:
+        frames = handle.readframes(handle.getnframes())
+    pause = b"\x80" * (8000 * PIECE_PAUSE_MS // 1000)
+    assert frames == pause.join([b"\x90" * 10] * len(SENTENCES))

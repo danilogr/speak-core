@@ -25,10 +25,12 @@ tools and no commands, and it never reads the environment: plugins pass it a map
   text. `sentences` cuts a text into the utterances a plugin queues, so the first plays
   while the next is synthesized. `pieces` cuts a text
   into what a speech model is sent one request at a time: a sentence a piece, a sentence
-  over the limit at its clauses, then its words, and a one-word sentence (`Dr.`) with the
-  next. A full stop before a lowercase letter of any alphabet (`e.g. éclair`) ends no
-  sentence, and the full-width marks of Chinese and Japanese (`。`, `，`) cut without a
-  space after them. `close` ends a piece in sentence-final punctuation. Pure; no I/O.
+  over the limit at its clauses, then its words, and a one-word sentence (`Prof.`) with
+  the next. A full stop before a lowercase letter of any alphabet (`e.g. éclair`) ends no
+  sentence, nor does one after `Mr`, `Mrs`, `Dr`, `St` or a month's abbreviation, the
+  list NVIDIA's English text-normalization grammar does not break after; and the
+  full-width marks of Chinese and Japanese (`。`, `，`) cut without a space after them.
+  `close` ends a piece in sentence-final punctuation. Pure; no I/O.
 - **`engines`** — a `Protocol` and three implementations (`say`, `nemo`, `command`).
   An engine turns a sentence into an `Utterance`: a command, its arguments, and an
   optional async cleanup. Engines must not play audio or manage processes themselves.

@@ -16,6 +16,14 @@ _FINAL = re.compile(rf"[.!?\u2026\u3002\uff01\uff1f]{_CLOSERS}$")
 _FULL_WIDTH_FINAL = re.compile(rf"[\u3002\uff01\uff1f]{_CLOSERS}$")
 _TRAILING_CLAUSE = re.compile(rf"\s*[,;:\u2014\u2013\uff0c\u3001\uff1b\uff1a]+({_CLOSERS})$")
 _WORD = re.compile(r"\w")
+# Abbreviations a full stop after which ends no sentence: NVIDIA's English
+# text-normalization grammar's `sentence_boundary_exceptions.txt`, the list the speech
+# server itself does not break a sentence after.
+_NO_BREAK_AFTER = re.compile(
+    r"(?<![\w.])(?:Mr|Mrs|Dr|St|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\.$"
+)
+# The longest of those, its full stop, and the character before it.
+_NO_BREAK_REACH = 5
 
 
 def normalize(text: str | None) -> str:
@@ -33,7 +41,7 @@ def normalize(text: str | None) -> str:
 
 def sentences(text: str) -> list[str]:
     """One-line `text`'s sentences, whole however long, each a separate utterance so the
-    first is heard while the next is prepared. A one-word sentence (`Dr.`) goes with the
+    first is heard while the next is prepared. A one-word sentence (`Prof.`) goes with the
     sentence after it."""
     return pieces(text, max_chars=max(len(text), 1))
 
@@ -43,7 +51,7 @@ def pieces(text: str, *, max_chars: int) -> list[str]:
     piece, because MagpieTTS repeats and garbles words when one request holds several. A
     sentence over `max_chars` is cut at its clauses, packed up to the limit, then at its
     words, and a word longer than the limit where the limit falls. A one-word sentence,
-    usually an abbreviation such as `Dr.`, goes with the sentence after it when both
+    usually an abbreviation such as `Prof.`, goes with the sentence after it when both
     fit; one holding no word (`!!!`) at the end goes with the sentence before it. Every
     character but the whitespace a cut falls on is kept.
 
@@ -86,7 +94,7 @@ def close(piece: str) -> str:
 
 
 def _one_word(sentence: str) -> bool:
-    """Whether `sentence` is one word, as an abbreviation (`Dr.`) is: no space in it, and
+    """Whether `sentence` is one word, as an abbreviation (`Prof.`) is: no space in it, and
     not a sentence of a language written without spaces."""
     return " " not in sentence and _FULL_WIDTH_FINAL.search(sentence) is None
 
@@ -96,11 +104,13 @@ def _split_after(
 ) -> list[str]:
     """`text` cut at each whitespace run `pattern` marks; the punctuation stays left. With
     `unless_lowercase`, a mark followed by whitespace and a lowercase letter, as an
-    abbreviation is (`e.g. here`, `z. B. überall`), is no cut."""
+    abbreviation is (`e.g. here`, `z. B. überall`), is no cut, and nor is the full stop
+    of a title, street or month (`Dr. Lee`, `St. Louis`, `Oct. 8`)."""
     cut, start = [], 0
     for match in pattern.finditer(text):
         gap, after = match.group(1), text[match.end(1) : match.end(1) + 1]
-        if unless_lowercase and gap and after.islower():
+        before = text[max(0, match.start(1) - _NO_BREAK_REACH) : match.start(1)]
+        if unless_lowercase and gap and (after.islower() or _NO_BREAK_AFTER.search(before)):
             continue
         cut.append(text[start : match.start(1)])
         start = match.end(1)

@@ -28,7 +28,7 @@ def test_sentences_are_whole_however_long():
 
 
 def test_a_one_word_sentence_is_spoken_with_the_next():
-    assert sentences("Dr. Smith is here. Yes.") == ["Dr. Smith is here.", "Yes."]
+    assert sentences("Prof. Smith is here. Yes.") == ["Prof. Smith is here.", "Yes."]
 
 
 def test_one_word_is_one_sentence():
@@ -67,7 +67,7 @@ def test_a_word_longer_than_the_limit_is_cut_where_the_limit_falls():
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("Dr. Smith arrived late.", ["Dr. Smith arrived late."]),
+        ("Prof. Smith arrived late.", ["Prof. Smith arrived late."]),
         ("Darker, e.g. here, is fine.", ["Darker, e.g. here, is fine."]),
         ("Yes. That is right.", ["Yes. That is right."]),
         ("That is right. Yes.", ["That is right.", "Yes."]),
@@ -112,6 +112,29 @@ def test_a_limit_under_one_is_refused():
 def test_an_abbreviation_before_a_lowercase_letter_of_any_alphabet_ends_no_sentence():
     text = "Il faut, p. ex. \u00e9videmment, le faire, e.g. \u00e9clair."
     assert sentences(text) == [text]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "We met Dr. Lee today.",
+        "Turn left on Nobel Dr. and park.",
+        "Ask Mr. Smith and Mrs. Jones on St. Louis Ave.",
+        "It opened in Oct. Nobody came.",
+        "Ask (Dr. Lee) now.",
+    ],
+)
+def test_a_title_street_or_month_abbreviation_ends_no_sentence(text):
+    assert sentences(text) == [text]
+
+
+def test_a_word_that_only_ends_like_an_abbreviation_still_ends_a_sentence():
+    assert sentences("Talk to Mr. Hyde. Then sing a dr. Next is Dr. Oct. Done.") == [
+        "Talk to Mr. Hyde.",
+        "Then sing a dr.",
+        "Next is Dr. Oct. Done.",
+    ]
+    assert sentences("Ask the DrDr. Then go.") == ["Ask the DrDr.", "Then go."]
 
 
 def test_a_clause_mark_inside_a_closing_quote_still_cuts():

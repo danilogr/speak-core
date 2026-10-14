@@ -64,3 +64,7 @@ prices, times and abbreviations as words. It reads `NEMO_BIN`, `NEMO_INSTALLER` 
 
 Operating rules are in [AGENTS.md](AGENTS.md); design and decisions in
 [harness/architecture.md](harness/architecture.md).
+
+## License
+
+MIT — see [LICENSE](LICENSE).

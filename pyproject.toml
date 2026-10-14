@@ -3,6 +3,8 @@ name = "speak-core"
 version = "0.4.0"
 description = "The shared speech engine under the voicebox and walkie plugins, built on NVIDIA NeMo-Speech.cpp."
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "httpx2>=2.12",
 ]
@@ -11,7 +13,7 @@ dependencies = [
 speak-core-setup = "speak_core.setup:main"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]

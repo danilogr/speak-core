@@ -22,6 +22,7 @@
 | File | Purpose |
 |---|---|
 | [`README.md`](../README.md) | What the library provides, the shared settings, installing NeMo-Speech.cpp, and the developer quickstart. |
+| [`LICENSE`](../LICENSE) | The MIT license. |
 | [`AGENTS.md`](../AGENTS.md) | Operating rules and behavioral constraints for AI coding agents working on this repository. |
 | [`pyproject.toml`](../pyproject.toml) | Package metadata, the `speak-core-setup` console script, ruff/mypy/pytest settings. |
 | [`uv.lock`](../uv.lock) | Pinned dependency lockfile ensuring reproducible builds. |

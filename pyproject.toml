@@ -1,6 +1,6 @@
 [project]
 name = "speak-core"
-version = "0.4.0"
+version = "0.4.1"
 description = "The shared speech engine under the voicebox and walkie plugins, built on NVIDIA NeMo-Speech.cpp."
 requires-python = ">=3.12"
 license = "MIT"

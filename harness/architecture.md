@@ -70,7 +70,9 @@ tools and no commands, and it never reads the environment: plugins pass it a map
   actually present. Pure apart from the injected `which`, so the search is testable on
   any machine. Used by the `nemo` engine and by a plugin's own cues.
 - **`engines.asr`** — transcription over the speech server's OpenAI-compatible
-  route. It must not record anything.
+  route. It must not record anything. It sends no `model`: the server uses the one
+  transcription model it loaded, and NeMo-Speech.cpp 0.3.0 answers 404 to any id but
+  the file name it reports for that model in `/v1/models`.
 - **`runtime`** — what every plugin's entry points build the same way: logging, the
   health probe and the shared server's supervisor (`supervisor_for`). It installs the
   one log handler, on stderr, on both the plugin's logger and the core package's, and is
@@ -314,10 +316,12 @@ plugin stores is its own.
   the warmup, and starting the server eagerly at session start even when the session
   never speaks.
 
-- **`--device auto` is always passed, and NeMo-Speech.cpp must be 0.2.0 or later.**
+- **`--device auto` is always passed, and NeMo-Speech.cpp must be 0.3.0 or later.**
   `auto` is Metal on Apple silicon, where 0.2.0 synthesises this workload at about
   2x realtime against 0.07x on CPU (measured in the plugins' `harness/performance.md`). Before 0.2.0, MagpieTTS on
-  Metal returns DC saturation instead of speech on M5-class Macs, so
+  Metal returns DC saturation instead of speech on M5-class Macs; before 0.3.0,
+  `transcribe --diarize` collapses everything but the last ten minutes or so of a long
+  recording to one speaker and labels no speakers in text, srt or vtt. So
   `install-nemo.sh` upgrades anything older and fails if an older copy still wins on
   PATH. Known limitation: with neither Metal nor CUDA, `auto` is CPU, where 0.2.0
   synthesis is slow enough that most sentences time out and fall back to `say`.

@@ -59,18 +59,21 @@ class NemoTranscriber:
         base_url: str,
         client: httpx2.AsyncClient | None = None,
         api_key: str | None = None,
-        model: str = "nemotron-3.5",
         timeout: float = DEFAULT_TIMEOUT,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._client = client or httpx2.AsyncClient(timeout=timeout)
-        self._model = model
         self._timeout = timeout
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
 
     async def transcribe(self, wav: bytes, *, language: str | None = None) -> str:
-        """Transcribe one recording, collapsed to a single line."""
-        form = {"model": self._model}
+        """Transcribe one recording, collapsed to a single line.
+
+        No `model` is sent, so the server uses the one transcription model it loaded.
+        NeMo-Speech.cpp 0.3.0 refuses any other value with a 404, and reports that
+        model under its file name, not the name it was started with.
+        """
+        form: dict[str, str] = {}
         if language:
             form["language"] = language
         try:

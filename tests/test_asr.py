@@ -30,7 +30,7 @@ async def test_returns_the_transcript_collapsed_to_one_line():
     assert await transcriber_over(handler).transcribe(WAV) == "run the tests"
 
 
-async def test_posts_the_audio_and_the_model_to_the_transcription_route():
+async def test_posts_the_audio_to_the_transcription_route_without_a_model():
     seen: dict[str, object] = {}
 
     def handler(request: httpx2.Request) -> httpx2.Response:
@@ -38,9 +38,9 @@ async def test_posts_the_audio_and_the_model_to_the_transcription_route():
         seen["body"] = request.content
         return httpx2.Response(200, json={"text": "ok"})
 
-    await transcriber_over(handler, model="parakeet-tdt").transcribe(WAV, language="en")
+    await transcriber_over(handler).transcribe(WAV, language="en")
     assert seen["url"].endswith("/v1/audio/transcriptions")
-    assert b"parakeet-tdt" in seen["body"]
+    assert b'name="model"' not in seen["body"]
     assert b'name="language"' in seen["body"]
     assert WAV in seen["body"]
 

@@ -84,8 +84,8 @@ async def test_sends_the_configured_model_and_the_default_voice():
     assert seen[0]["response_format"] == "wav"
 
 
-async def test_a_dates_comma_before_its_year_never_reaches_the_server():
-    """Its text normalization says "sil" there; voice-overs use the synthesizer directly."""
+async def test_a_date_reaches_the_server_as_written():
+    """The server's text normalization reads `Oct. 8, 2026` with its comma."""
     seen: list[str] = []
 
     def handler(request: httpx2.Request) -> httpx2.Response:
@@ -97,7 +97,7 @@ async def test_a_dates_comma_before_its_year_never_reaches_the_server():
     )
     await synthesizer.synthesize("Due Oct. 8, 2026, at noon.", voice=None)
 
-    assert seen == ["Due Oct. 8 2026, at noon."]
+    assert seen == ["Due Oct. 8, 2026, at noon."]
 
 
 async def test_an_explicit_voice_overrides_the_default():

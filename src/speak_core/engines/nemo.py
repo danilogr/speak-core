@@ -14,7 +14,7 @@ import httpx2
 from speak_core.engines.base import Engine, Utterance
 from speak_core.engines.say import SayEngine
 from speak_core.player import Player, resolve_player
-from speak_core.text import close, pieces, without_date_commas
+from speak_core.text import close, pieces
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +108,7 @@ class NemoSynthesizer:
     No fallback and no playback. A caller with somewhere else to send a sentence
     (`NemoEngine`, which speaks through `say`) decides that itself; one that must not
     change voice halfway (a voice-over file) gets the failure, with a `kind` it can
-    turn into its own reason. A date's comma before its year is dropped from every
-    request (`text.without_date_commas`).
+    turn into its own reason.
     """
 
     def __init__(
@@ -133,7 +132,7 @@ class NemoSynthesizer:
                 f"{self._base_url}/v1/audio/speech",
                 json={
                     "model": self._model,
-                    "input": without_date_commas(text),
+                    "input": text,
                     "voice": voice,
                     "response_format": "wav",
                 },

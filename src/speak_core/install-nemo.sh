@@ -8,8 +8,10 @@ BIN="${NEMO_BIN:-nemo-speech}"
 TN_DIR="${NEMO_TN_DIR:?run this through speak-core-setup, which sets NEMO_TN_DIR}"
 INSTALLER="${NEMO_INSTALLER:-https://github.com/NVIDIA/NeMo-Speech.cpp/raw/main/scripts/install.sh}"
 # The supervisor runs the server on --device auto. Below 0.2.0, MagpieTTS on Metal
-# returns DC saturation instead of speech on M5-class Macs, so older builds are upgraded.
-MIN_VERSION=0.2.0
+# returns DC saturation instead of speech on M5-class Macs. Below 0.3.0, `transcribe
+# --diarize` gives every word older than about the last ten minutes of a long recording
+# one speaker, and text, srt and vtt carry no speaker labels. Older builds are upgraded.
+MIN_VERSION=0.3.0
 
 installed_version() {
   "$BIN" --version 2>/dev/null | awk '{print $2; exit}'
